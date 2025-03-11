@@ -1,45 +1,28 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import supabase from '../../lib/supabaseClient';
+import DashboardNavBar from '../DashboardNavBar';
 
 const TimetableDashboard = () => {
-  const navigate = useNavigate();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
-  };
-
   return (
     <div className="dashboard-page">
-      {/* Navbar */}
-      <nav className="navbar">
-        <div className="navbar-container">
-          <h1>University Academic Management System</h1>
-          <ul>
-            <li>
-              <button onClick={handleSignOut} className="sign-out-btn">Sign Out</button>
-            </li>
-          </ul>
-        </div>
-      </nav>
+      {/* Use the DashboardNavBar component */}
+      <DashboardNavBar />
 
-      <div className="dashboard">
+      <div className="dashboard" style={{ marginTop: '60px' }}>
         <h1>Timetable Dashboard</h1>
         <div className="dashboard-content">
           <p>Welcome to the Timetable Management System</p>
           <div className="dashboard-actions">
             <div className="action-card">
-              <h3>Create Timetable</h3>
-              <p>Create timetable</p>
+              <h3>task 1</h3>
+              <p>task 1</p>
             </div>
             <div className="action-card">
-              <h3>Display Timetables</h3>
-              <p>Display Timetables</p>
+              <h3>task 2</h3>
+              <p>task 2</p>
             </div>
             <div className="action-card">
-              <h3>Send Timetable to Exam Coordinator</h3>
-              <p>Send Timetable to Exam Coordinator</p>
+              <h3>task 3</h3>
+              <p>task 3</p>
             </div>
           </div>
         </div>
