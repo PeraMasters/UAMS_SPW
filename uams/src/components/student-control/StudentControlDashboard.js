@@ -1,30 +1,13 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import supabase from '../../lib/supabaseClient';
+import DashboardNavBar from '../DashboardNavBar';
 
 const StudentControlDashboard = () => {
-  const navigate = useNavigate();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
-  };
-
   return (
     <div className="dashboard-page">
-      {/* Navbar */}
-      <nav className="navbar">
-        <div className="navbar-container">
-          <h1>University Academic Management System</h1>
-          <ul>
-            <li>
-              <button onClick={handleSignOut} className="sign-out-btn">Sign Out</button>
-            </li>
-          </ul>
-        </div>
-      </nav>
+      {/* Use the DashboardNavBar component */}
+      <DashboardNavBar />
 
-      <div className="dashboard">
+      <div className="dashboard" style={{ marginTop: '60px' }}>
         <h1>Student Control Dashboard</h1>
         <div className="dashboard-content">
           <p>Welcome to the Student Control Management System</p>
