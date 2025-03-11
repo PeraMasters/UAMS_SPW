@@ -1,18 +1,54 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import supabase from "../lib/supabaseClient";
 import "./Login.css";
+import PublicNavBar from "./PublicNavBar";
 
 const Login = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isButtonHovered, setIsButtonHovered] = useState(false);
   
   // Login form state
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
   });
+
+  // Button styles for the login form submit button
+  const buttonStyle = {
+    backgroundColor: '#E6BB0C', // Yellow background
+    color: '#342D2D',           // Dark text
+    width: '100%',
+    padding: '10px',
+    border: '2px solid #342D2D', // Added border
+    borderRadius: '4px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    marginTop: '1rem',
+    transition: 'all 0.3s ease',
+    // Show dark color (#342D2D) when hovered/active
+    ...(isButtonHovered && {
+      backgroundColor: '#342D2D', // Dark color (specified as "brown")
+      color: '#ffffff'            // White text for better contrast
+    })
+  };
+
+  // Button styles for disabled state
+  const disabledButtonStyle = {
+    backgroundColor: '#cccccc',
+    color: '#666666',
+    width: '100%',
+    padding: '10px',
+    border: '2px solid #999999', // Added border for disabled state
+    borderRadius: '4px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'not-allowed',
+    marginTop: '1rem'
+  };
 
   const handleLoginInputChange = (e) => {
     setLoginFormData({
@@ -80,18 +116,10 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <nav className="navbar">
-        <div className="navbar-container">
-          <h1>University Management</h1>
-          <ul>
-            <li><Link to="/">Home</Link></li>
-            <li><Link to="/#about-section">About</Link></li>
-            <li><Link to="/login">Login</Link></li>
-          </ul>
-        </div>
-      </nav>
+      {/* Use the PublicNavBar component */}
+      <PublicNavBar />
 
-      <div className="form-container">
+      <div className="form-container" style={{ marginTop: '60px' }}>
         <div className="login-form">
           <h2>Login</h2>
           {errorMessage && <div className="error-message">{errorMessage}</div>}
@@ -120,7 +148,15 @@ const Login = () => {
               />
             </div>
 
-            <button type="submit" disabled={isLoading}>
+            <button 
+              type="submit" 
+              style={isLoading ? disabledButtonStyle : buttonStyle} 
+              disabled={isLoading}
+              onMouseDown={() => setIsButtonHovered(true)}
+              onMouseUp={() => setIsButtonHovered(false)}
+              onMouseEnter={() => setIsButtonHovered(true)}
+              onMouseLeave={() => setIsButtonHovered(false)}
+            >
               {isLoading ? "Logging in..." : "Login"}
             </button>
           </form>
