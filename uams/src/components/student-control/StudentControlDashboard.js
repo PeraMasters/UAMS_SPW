@@ -1,7 +1,14 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardNavBar from '../DashboardNavBar';
 
 const StudentControlDashboard = () => {
+  const navigate = useNavigate();
+
+  const handleStudentRegistrationClick = () => {
+    navigate('/student-registration');
+  };
+
   return (
     <div className="dashboard-page">
       {/* Use the DashboardNavBar component */}
@@ -12,7 +19,7 @@ const StudentControlDashboard = () => {
         <div className="dashboard-content">
           <p>Welcome to the Student Control Management System</p>
           <div className="dashboard-actions">
-            <div className="action-card">
+            <div className="action-card" onClick={handleStudentRegistrationClick} style={{ cursor: 'pointer' }}>
               <h3>Student Registration</h3>
               <p>Manage student enrollment and registration</p>
             </div>
