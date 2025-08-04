@@ -63,19 +63,34 @@ const Login = () => {
     setErrorMessage("");
 
     try {
+      console.log("Attempting login with:", { username: loginFormData.username }); // Debug log
+      
       // Query the Login table
       const { data, error } = await supabase
-        .from("Login")
+        .from("login")
         .select("*")
         .eq("user_name", loginFormData.username)
         .eq("password", loginFormData.password)
         .single();
 
+      console.log("Supabase response:", { data, error }); // Debug log
+
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
 
       if (data) {
+        console.log("Login successful, user data:", data); // Debug log
+        
+        // Store user session data in localStorage
+        localStorage.setItem('userSession', JSON.stringify({
+          id: data.id,
+          username: data.user_name,
+          role: data.role,
+          loginTime: new Date().toISOString()
+        }));
+        
         // Route based on user role
         redirectBasedOnRole(data.role);
       } else {
@@ -83,7 +98,13 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Error during login:", error.message);
-      setErrorMessage("Login failed. Please try again.");
+      if (error.message.includes("JWT")) {
+        setErrorMessage("Database connection error. Please check your Supabase configuration.");
+      } else if (error.message.includes("relation") || error.message.includes("does not exist")) {
+        setErrorMessage("Table 'login' not found. Please check your database setup.");
+      } else {
+        setErrorMessage("Login failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -91,24 +112,27 @@ const Login = () => {
 
   // Function to redirect based on user role
   const redirectBasedOnRole = (role) => {
+    console.log("User role from database:", role); // Debug log
     switch (role) {
-      case "exam":
+      case "Exam Unit":
         navigate("/exam-dashboard");
         break;
-      case "academic cordinator":
+      case "Academic Unit":
         navigate("/academic-cordinator-dashboard");
         break;
-      case "timetable":
+      case "Timetable Unit":
         navigate("/timetable-dashboard");
         break;
-      case "student controll":
+      case "Student controll Unit":
         navigate("/student-control-dashboard");
         break;
-      case "student":
+      case "Student":
         navigate("/student-dashboard");
         break;
       default:
         // If role is not recognized, redirect to home
+        console.log("Unrecognized role:", role);
+        setErrorMessage(`Unrecognized role: ${role}`);
         navigate("/");
         break;
     }
