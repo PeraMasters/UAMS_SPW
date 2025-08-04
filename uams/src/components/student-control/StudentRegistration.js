@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import DashboardNavBar from '../DashboardNavBar';
 import StudentRegistrationForm from './StudentRegistrationForm';
 import StudentUpdateForm from './StudentUpdateForm';
+import StudentDetailsView from './StudentDetailsView';
 import supabase from '../../lib/supabaseClient';
 
 const StudentRegistration = () => {
   const [showForm, setShowForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDetailsView, setShowDetailsView] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [students, setStudents] = useState([]);
   const [allStudents, setAllStudents] = useState([]); // Store all students
   const [loading, setLoading] = useState(true);
@@ -16,14 +19,16 @@ const StudentRegistration = () => {
   const [filters, setFilters] = useState({
     facultyid: '',
     degreeid: '',
-    batch: ''
+    admission_year: '',
+    status: ''
   });
   
   // Filter options
   const [faculties, setFaculties] = useState([]);
   const [degrees, setDegrees] = useState([]);
   const [allDegrees, setAllDegrees] = useState([]);
-  const [batches, setBatches] = useState([]);
+  const [admissionYears, setAdmissionYears] = useState([]);
+  const [statuses] = useState(['Active', 'Hold', 'Dropped', 'Graduated']);
 
   useEffect(() => {
     fetchStudents();
@@ -71,7 +76,8 @@ const StudentRegistration = () => {
           address,
           parent_name,
           parent_contact_no,
-          batch,
+          admission_year,
+          status,
           facultyid,
           degreeid,
           faculty:facultyid(fname),
@@ -86,9 +92,9 @@ const StudentRegistration = () => {
         setAllStudents(studentsData);
         setStudents(studentsData);
         
-        // Extract unique batches for filter
-        const uniqueBatches = [...new Set(studentsData.map(student => student.batch))].sort();
-        setBatches(uniqueBatches);
+        // Extract unique admission years for filter
+        const uniqueAdmissionYears = [...new Set(studentsData.map(student => student.admission_year))].sort();
+        setAdmissionYears(uniqueAdmissionYears);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -144,9 +150,14 @@ const StudentRegistration = () => {
       filtered = filtered.filter(student => student.degreeid === filters.degreeid);
     }
 
-    // Filter by batch
-    if (filters.batch) {
-      filtered = filtered.filter(student => student.batch === filters.batch);
+    // Filter by admission year
+    if (filters.admission_year) {
+      filtered = filtered.filter(student => student.admission_year === filters.admission_year);
+    }
+
+    // Filter by status
+    if (filters.status) {
+      filtered = filtered.filter(student => student.status === filters.status);
     }
 
     setStudents(filtered);
@@ -163,8 +174,24 @@ const StudentRegistration = () => {
     setFilters({
       facultyid: '',
       degreeid: '',
-      batch: ''
+      admission_year: '',
+      status: ''
     });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Active':
+        return '#27ae60'; // Green
+      case 'Hold':
+        return '#f39c12'; // Orange
+      case 'Dropped':
+        return '#e74c3c'; // Red
+      case 'Graduated':
+        return '#3498db'; // Blue
+      default:
+        return '#95a5a6'; // Gray
+    }
   };
 
   const handleStudentAdded = () => {
@@ -181,6 +208,11 @@ const StudentRegistration = () => {
   const handleEditClick = (student) => {
     setEditingStudent(student);
     setShowEditForm(true);
+  };
+
+  const handleViewClick = (student) => {
+    setSelectedStudent(student);
+    setShowDetailsView(true);
   };
 
   const handleDeleteClick = async (student) => {
@@ -278,8 +310,8 @@ const StudentRegistration = () => {
               </select>
 
               <select
-                value={filters.batch}
-                onChange={(e) => handleFilterChange('batch', e.target.value)}
+                value={filters.admission_year}
+                onChange={(e) => handleFilterChange('admission_year', e.target.value)}
                 style={{
                   padding: '8px',
                   border: '1px solid #ddd',
@@ -287,10 +319,28 @@ const StudentRegistration = () => {
                   fontSize: '14px'
                 }}
               >
-                <option value="">All Batches</option>
-                {batches.map(batch => (
-                  <option key={batch} value={batch}>
-                    {batch}
+                <option value="">All Admission Years</option>
+                {admissionYears.map(year => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                style={{
+                  padding: '8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="">All Statuses</option>
+                {statuses.map(status => (
+                  <option key={status} value={status}>
+                    {status}
                   </option>
                 ))}
               </select>
@@ -329,9 +379,26 @@ const StudentRegistration = () => {
             />
           )}
 
+          {showDetailsView && selectedStudent && (
+            <StudentDetailsView
+              student={selectedStudent}
+              onClose={() => {
+                setShowDetailsView(false);
+                setSelectedStudent(null);
+              }}
+              onEdit={handleEditClick}
+              onDelete={handleDeleteClick}
+            />
+          )}
+
           <div className="students-list">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h2>Registered Students</h2>
+              <div>
+                <h2 style={{ margin: 0 }}>Registered Students</h2>
+                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                  💡 Click on any row to view details • Edit and delete options available in details view
+                </p>
+              </div>
               <div style={{ fontSize: '14px', color: '#666' }}>
                 Showing {students.length} of {allStudents.length} students
               </div>
@@ -361,13 +428,34 @@ const StudentRegistration = () => {
                       <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Phone</th>
                       <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Faculty</th>
                       <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Degree</th>
-                      <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Batch</th>
-                      <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Actions</th>
+                      <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Admission Year</th>
+                      <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student) => (
-                      <tr key={student.sid}>
+                    {students.map((student) => {
+                      const statusColor = getStatusColor(student.status);
+                      const rowBackgroundColor = statusColor + '15'; // Light transparency
+                      const hoverBackgroundColor = statusColor + '25'; // Slightly more opacity on hover
+                      
+                      return (
+                        <tr 
+                          key={student.sid}
+                          onClick={() => handleViewClick(student)}
+                          style={{
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s ease',
+                            backgroundColor: rowBackgroundColor,
+                            borderLeft: `4px solid ${statusColor}`
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = hoverBackgroundColor;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = rowBackgroundColor;
+                          }}
+                          title="Click to view student details"
+                        >
                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>{student.sid}</td>
                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                           {student.f_name} {student.l_name}
@@ -380,43 +468,24 @@ const StudentRegistration = () => {
                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                           {student.degree?.dname || 'N/A'}
                         </td>
-                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>{student.batch}</td>
+                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>{student.admission_year}</td>
                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                          <div style={{ display: 'flex', gap: '5px' }}>
-                            <button
-                              onClick={() => handleEditClick(student)}
-                              style={{
-                                padding: '5px 10px',
-                                backgroundColor: '#3498db',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '3px',
-                                cursor: 'pointer',
-                                fontSize: '12px'
-                              }}
-                              title="Edit Student"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteClick(student)}
-                              style={{
-                                padding: '5px 10px',
-                                backgroundColor: '#e74c3c',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '3px',
-                                cursor: 'pointer',
-                                fontSize: '12px'
-                              }}
-                              title="Delete Student"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                          <span
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              color: 'white',
+                              backgroundColor: getStatusColor(student.status)
+                            }}
+                          >
+                            {student.status || 'N/A'}
+                          </span>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

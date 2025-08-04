@@ -16,7 +16,8 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
     parent_contact_no: '',
     facultyid: '',
     degreeid: '',
-    batch: ''
+    admission_year: '',
+    status: ''
   });
 
   const [faculties, setFaculties] = useState([]);
@@ -46,7 +47,8 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
         parent_contact_no: studentData.parent_contact_no || '',
         facultyid: studentData.facultyid || '',
         degreeid: studentData.degreeid || '',
-        batch: studentData.batch || ''
+        admission_year: studentData.admission_year || '',
+        status: studentData.status || 'Active'
       });
     }
   }, [studentData]);
@@ -127,7 +129,8 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
     if (!formData.parent_contact_no.trim()) newErrors.parent_contact_no = 'Parent contact is required';
     if (!formData.facultyid) newErrors.facultyid = 'Faculty is required';
     if (!formData.degreeid) newErrors.degreeid = 'Degree is required';
-    if (!formData.batch.trim()) newErrors.batch = 'Batch is required';
+    if (!formData.admission_year.trim()) newErrors.admission_year = 'Admission year is required';
+    if (!formData.status) newErrors.status = 'Status is required';
 
     // Email validation
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
@@ -163,7 +166,8 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
           parent_contact_no: formData.parent_contact_no,
           facultyid: formData.facultyid,
           degreeid: formData.degreeid,
-          batch: formData.batch
+          admission_year: formData.admission_year,
+          status: formData.status
         })
         .eq('sid', formData.sid);
 
@@ -423,16 +427,32 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
             </div>
 
             <div>
-              <label>Batch *</label>
+              <label>Admission Year *</label>
               <input
                 type="text"
-                name="batch"
-                value={formData.batch}
+                name="admission_year"
+                value={formData.admission_year}
                 onChange={handleInputChange}
                 style={inputStyle}
-                placeholder="Enter batch (e.g., 2024)"
+                placeholder="Enter admission year (e.g., 2024)"
               />
-              {errors.batch && <div style={errorStyle}>{errors.batch}</div>}
+              {errors.admission_year && <div style={errorStyle}>{errors.admission_year}</div>}
+            </div>
+
+            <div>
+              <label>Status *</label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                style={inputStyle}
+              >
+                <option value="Active">Active</option>
+                <option value="Hold">Hold</option>
+                <option value="Dropped">Dropped</option>
+                <option value="Graduated">Graduated</option>
+              </select>
+              {errors.status && <div style={errorStyle}>{errors.status}</div>}
             </div>
           </div>
 
