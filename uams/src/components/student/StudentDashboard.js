@@ -1028,27 +1028,22 @@ const StudentDashboard = () => {
                       border: '1px solid #dee2e6'
                     }}>
                       <h5 style={{ color: '#495057', marginBottom: '10px' }}>Payment Summary</h5>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#007bff' }}>
-                            {semesterPayments.length}
+                            {formatCurrency(
+                              semesterPayments.reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
+                            )}
                           </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>Semester Payments</div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Total Semester Fees</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>
-                            {otherPayments.length}
-                          </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>Other Payments</div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6f42c1' }}>
                             {formatCurrency(
-                              [...semesterPayments, ...otherPayments]
-                                .reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
+                              otherPayments.reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
                             )}
                           </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>Total Amount</div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Total Other Payments</div>
                         </div>
                       </div>
                     </div>
