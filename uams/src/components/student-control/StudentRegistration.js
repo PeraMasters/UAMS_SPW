@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardNavBar from '../DashboardNavBar';
 import StudentRegistrationForm from './StudentRegistrationForm';
 import StudentUpdateForm from './StudentUpdateForm';
@@ -23,6 +23,9 @@ const StudentRegistration = () => {
     status: ''
   });
   
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  
   // Filter options
   const [faculties, setFaculties] = useState([]);
   const [degrees, setDegrees] = useState([]);
@@ -39,6 +42,7 @@ const StudentRegistration = () => {
   // Filter degrees when faculty filter changes
   useEffect(() => {
     if (filters.facultyid) {
+      // eslint-disable-next-line eqeqeq
       const filtered = allDegrees.filter(degree => degree.facultyid == filters.facultyid);
       setDegrees(filtered);
       // Clear degree filter if current degree doesn't belong to selected faculty
@@ -52,12 +56,7 @@ const StudentRegistration = () => {
       setDegrees([]);
       setFilters(prev => ({ ...prev, degreeid: '' }));
     }
-  }, [filters.facultyid, allDegrees]);
-
-  // Apply filters when filters change
-  useEffect(() => {
-    applyFilters();
-  }, [filters, allStudents]);
+  }, [filters.facultyid, filters.degreeid, allDegrees]);
 
   const fetchStudents = async () => {
     try {
@@ -137,11 +136,25 @@ const StudentRegistration = () => {
     }
   };
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...allStudents];
+
+    // Filter by search term (student ID or name)
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(student => {
+        const fullName = `${student.f_name} ${student.l_name}`.toLowerCase();
+        const studentId = student.sid.toLowerCase();
+        return studentId.includes(searchLower) || 
+               fullName.includes(searchLower) ||
+               student.f_name.toLowerCase().includes(searchLower) ||
+               student.l_name.toLowerCase().includes(searchLower);
+      });
+    }
 
     // Filter by faculty
     if (filters.facultyid) {
+      // eslint-disable-next-line eqeqeq
       filtered = filtered.filter(student => student.facultyid == filters.facultyid);
     }
 
@@ -161,7 +174,12 @@ const StudentRegistration = () => {
     }
 
     setStudents(filtered);
-  };
+  }, [allStudents, searchTerm, filters]);
+
+  // Apply filters when filters or search term change
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
 
   const handleFilterChange = (filterName, value) => {
     setFilters(prev => ({
@@ -177,6 +195,7 @@ const StudentRegistration = () => {
       admission_year: '',
       status: ''
     });
+    setSearchTerm('');
   };
 
   const getStatusColor = (status) => {
@@ -249,6 +268,52 @@ const StudentRegistration = () => {
         <h1>Student Registration Management</h1>
         
         <div className="dashboard-content">
+          {/* Search Bar */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+              <span style={{ fontWeight: 'bold', color: '#342D2D', minWidth: 'fit-content' }}>🔍 Search:</span>
+              <input
+                type="text"
+                placeholder="Search by Student ID or Name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '10px 15px',
+                  border: '2px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  outline: 'none',
+                  transition: 'border-color 0.3s ease',
+                  maxWidth: '400px'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#E6BB0C';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#ddd';
+                }}
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{
+                    padding: '8px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    backgroundColor: '#f8f9fa',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    color: '#666'
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <button
               onClick={() => setShowForm(true)}
@@ -395,9 +460,6 @@ const StudentRegistration = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <div>
                 <h2 style={{ margin: 0 }}>Registered Students</h2>
-                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                  💡 Click on any row to view details • Edit and delete options available in details view
-                </p>
               </div>
               <div style={{ fontSize: '14px', color: '#666' }}>
                 Showing {students.length} of {allStudents.length} students
