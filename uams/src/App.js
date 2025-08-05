@@ -6,7 +6,11 @@ import ExamDashboard from "./components/exam/ExamDashboard";
 import AcademicCordinatorDashboard from "./components/academic-cordinator/AcademicCordinatorDashboard";
 import TimetableDashboard from "./components/timetable/TimetableDashboard";
 import StudentControlDashboard from "./components/student-control/StudentControlDashboard";
+import StudentRegistration from "./components/student-control/StudentRegistration";
+import StudentRegistrationAndAccountCreation from "./components/student-control/StudentRegistrationAndAccountCreation";
+import StudentAccountCreation from "./components/student-control/StudentAccountCreation";
 import StudentDashboard from "./components/student/StudentDashboard";
+import PaymentDetails from "./components/student/PaymentDetails";
 import "./components/Dashboard.css";
 
 // Protected Route Component
@@ -58,10 +62,42 @@ function App() {
           } 
         />
         <Route 
+          path="/student-registration" 
+          element={
+            <ProtectedRoute>
+              <StudentRegistration />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/student-registration-and-account-creation" 
+          element={
+            <ProtectedRoute>
+              <StudentRegistrationAndAccountCreation />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/student-account-creation" 
+          element={
+            <ProtectedRoute>
+              <StudentAccountCreation />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/student-dashboard" 
           element={
             <ProtectedRoute>
               <StudentDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/payment-details" 
+          element={
+            <ProtectedRoute>
+              <PaymentDetails />
             </ProtectedRoute>
           } 
         />
