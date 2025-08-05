@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardNavBar from '../DashboardNavBar';
 import StudentAccCreateForm from './StudentAccCreateForm';
+import StudentAccUpdateForm from './StudentAccUpdateForm';
 import supabase from '../../lib/supabaseClient';
 
 const StudentAccountCreation = () => {
   const [showForm, setShowForm] = useState(false);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [allAccounts, setAllAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +62,17 @@ const StudentAccountCreation = () => {
   const handleAccountCreated = () => {
     setShowForm(false);
     fetchAccounts(); // Refresh the list
+  };
+
+  const handleAccountUpdated = () => {
+    setShowUpdateForm(false);
+    setSelectedAccount(null);
+    fetchAccounts(); // Refresh the list
+  };
+
+  const handleUpdateClick = (account) => {
+    setSelectedAccount(account);
+    setShowUpdateForm(true);
   };
 
   const clearFilters = () => {
@@ -160,6 +174,17 @@ const StudentAccountCreation = () => {
             />
           )}
 
+          {showUpdateForm && selectedAccount && (
+            <StudentAccUpdateForm
+              account={selectedAccount}
+              onClose={() => {
+                setShowUpdateForm(false);
+                setSelectedAccount(null);
+              }}
+              onAccountUpdated={handleAccountUpdated}
+            />
+          )}
+
           <div className="accounts-list">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <div>
@@ -225,16 +250,32 @@ const StudentAccountCreation = () => {
                           </span>
                         </td>
                         <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                          <button
-                            style={{
-                              backgroundColor: '#dc3545',
-                              color: 'white',
-                              border: 'none',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
+                          <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                            <button
+                              style={{
+                                backgroundColor: '#007bff',
+                                color: 'white',
+                                border: 'none',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                              }}
+                              onClick={() => handleUpdateClick(account)}
+                              title="Update account details"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              style={{
+                                backgroundColor: '#dc3545',
+                                color: 'white',
+                                border: 'none',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                              }}
                             onClick={async () => {
                               if (window.confirm(`Are you sure you want to delete account ${account.user_name}?`)) {
                                 try {
@@ -263,9 +304,11 @@ const StudentAccountCreation = () => {
                                 }
                               }
                             }}
+                            title="Delete account"
                           >
                             Delete
                           </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
