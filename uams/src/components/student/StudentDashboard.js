@@ -5,7 +5,6 @@ import { validateAttendanceEligibility, getClientIP, getUserAgent } from '../../
 
 const StudentDashboard = () => {
   const [studentData, setStudentData] = useState(null);
-  const [paymentData, setPaymentData] = useState([]);
   const [examResults, setExamResults] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,9 +27,22 @@ const StudentDashboard = () => {
   const [networkStatus, setNetworkStatus] = useState(null);
   const [markingAttendance, setMarkingAttendance] = useState(false);
 
+  // Payment details state
+  const [semesterPayments, setSemesterPayments] = useState([]);
+  const [otherPayments, setOtherPayments] = useState([]);
+  const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
+
   useEffect(() => {
     fetchStudentData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // Fetch detailed payments when payments tab becomes active
+    if (activeTab === 'payments' && studentData?.sid && semesterPayments.length === 0 && otherPayments.length === 0) {
+      fetchDetailedPayments(studentData.sid);
+    }
+  }, [activeTab, studentData, semesterPayments.length, otherPayments.length]);
 
   const fetchStudentData = async () => {
     try {
@@ -77,9 +89,8 @@ const StudentDashboard = () => {
 
       setStudentData(studentRecord);
 
-      // Fetch payment data using the student's SID
+      // Fetch other data using the student's SID
       if (studentRecord?.sid) {
-        await fetchPaymentData(studentRecord.sid);
         await fetchExamResults(studentRecord.sid);
         await fetchInquiries(studentRecord.sid);
         await fetchAttendanceData(studentRecord.sid);
@@ -95,7 +106,9 @@ const StudentDashboard = () => {
 
 
 
-  const fetchPaymentData = async (studentSID) => {
+  // fetchPaymentData function removed - now using fetchDetailedPayments instead
+  // eslint-disable-next-line no-unused-vars
+  const fetchPaymentData_UNUSED = async (studentSID) => {
     try {
       console.log('=== FETCHING PAYMENT DATA WITH 3-TABLE JOIN ===');
       console.log('Student SID:', studentSID);
@@ -151,8 +164,8 @@ const StudentDashboard = () => {
         console.log('2-table JOIN result:', { data: twoTableJoin, error: twoTableError });
 
         if (twoTableError) {
-          console.log('2-table JOIN failed, using manual approach...');
-          await fetchPaymentDataManually(studentSID);
+          console.log('2-table JOIN failed, skipping payment data fetch...');
+          // Manual fetch function removed - now using fetchDetailedPayments instead
         } else {
           console.log('2-table JOIN successful, now fetching course data separately...');
           
@@ -183,10 +196,8 @@ const StudentDashboard = () => {
                });
             
             console.log('Final payment data with course info:', paymentsWithCourses);
-            setPaymentData(paymentsWithCourses);
           } else {
             console.log('No CIDs found, setting payment data without course info');
-            setPaymentData(payments);
           }
         }
       } else {
@@ -211,17 +222,18 @@ const StudentDashboard = () => {
         });
         
         console.log('Final payment data from 3-table JOIN:', paymentsWithCourses);
-        setPaymentData(paymentsWithCourses);
       }
       
     } catch (error) {
       console.error('Error in fetchPaymentData:', error);
       // Fallback to manual approach
-      await fetchPaymentDataManually(studentSID);
+      // Function removed
     }
   };
 
-  const fetchPaymentDataManually = async (studentSID) => {
+  // fetchPaymentDataManually function removed - now using fetchDetailedPayments instead  
+  // eslint-disable-next-line no-unused-vars
+  const fetchPaymentDataManually_UNUSED = async (studentSID) => {
     try {
       console.log('=== MANUAL APPROACH: Fetching tables separately ===');
       
@@ -235,7 +247,6 @@ const StudentDashboard = () => {
       
       if (spError || !studentPayments || studentPayments.length === 0) {
         console.log('No student payments found');
-        setPaymentData([]);
         return;
       }
       
@@ -250,7 +261,6 @@ const StudentDashboard = () => {
       
       if (pError || !payments) {
         console.log('Error fetching payment details');
-        setPaymentData([]);
         return;
       }
       
@@ -279,29 +289,12 @@ const StudentDashboard = () => {
        });
       
       console.log('Final manual approach result:', paymentsWithCourses);
-      setPaymentData(paymentsWithCourses);
       
     } catch (error) {
       console.error('Error in manual fetch:', error);
-      setPaymentData([]);
     }
   };
-  
-  const handleManualPaymentFetch = async (payments, courses) => {
-    console.log('Using manual payment fetch approach...');
-    
-    // Add course names to payments
-    const paymentsWithCourses = payments.map(payment => {
-      const course = courses?.find(c => c.cid === payment.cid);
-      return {
-        ...payment,
-        cname: course ? course.cname : null
-      };
-    });
-    
-    console.log('Manual approach - Final payment data with course names:', paymentsWithCourses);
-    setPaymentData(paymentsWithCourses);
-  };
+
 
   const fetchExamResults = async (studentSID) => {
     try {
@@ -464,7 +457,7 @@ const StudentDashboard = () => {
       };
 
       // Insert attendance record
-      const { data: newAttendance, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('attendance')
         .insert([attendanceData])
         .select()
@@ -489,6 +482,69 @@ const StudentDashboard = () => {
       setMarkingAttendance(false);
     }
   };
+
+  const fetchDetailedPayments = async (studentSID) => {
+    setPaymentDetailsLoading(true);
+    try {
+      // Fetch semester payments
+      const { data: semesterData, error: semesterError } = await supabase
+        .from('semester_payment')
+        .select('*')
+        .eq('sid', studentSID)
+        .order('year', { ascending: false })
+        .order('semester', { ascending: false });
+
+      if (semesterError) {
+        console.error('Error fetching semester payments:', semesterError);
+      } else {
+        setSemesterPayments(semesterData || []);
+      }
+
+      // Fetch other payments
+      const { data: otherData, error: otherError } = await supabase
+        .from('other_payment')
+        .select(`
+          *,
+          course(
+            cid,
+            cname
+          )
+        `)
+        .eq('sid', studentSID)
+        .order('year', { ascending: false })
+        .order('semester', { ascending: false });
+
+      if (otherError) {
+        console.error('Error fetching other payments:', otherError);
+      } else {
+        setOtherPayments(otherData || []);
+      }
+
+    } catch (error) {
+      console.error('Error fetching detailed payments:', error);
+    } finally {
+      setPaymentDetailsLoading(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'paid':
+        return '#28a745'; // Green
+      case 'pending':
+        return '#ffc107'; // Yellow
+      case 'overdue':
+        return '#dc3545'; // Red
+      default:
+        return '#ffc107'; // Yellow (Default: Pending)
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return `Rs. ${parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
+
+
 
   const handleInquiryFormChange = (e) => {
     setInquiryForm({
@@ -520,6 +576,7 @@ const StudentDashboard = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const uploadFile = async (file, inquiryId) => {
     try {
       const fileExt = file.name.split('.').pop();
@@ -535,7 +592,7 @@ const StudentDashboard = () => {
       setUploadProgress(25);
 
       console.log('Uploading to Supabase storage bucket: student-files');
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('student-files') // Make sure this bucket exists in Supabase
         .upload(filePath, file);
 
@@ -627,7 +684,6 @@ const StudentDashboard = () => {
         return;
       }
 
-      let fileInfo = null;
       // If there's a file, upload it
       if (selectedFile && inquiryResult) {
         console.log('File upload temporarily disabled - bucket not set up yet');
@@ -636,7 +692,7 @@ const StudentDashboard = () => {
         
         // TODO: Uncomment below when storage bucket is ready
         /*
-        fileInfo = await uploadFile(selectedFile, inquiryResult.inquiryid);
+        const fileInfo = await uploadFile(selectedFile, inquiryResult.inquiryid);
         
         if (fileInfo) {
           // Update the inquiry record with file information
@@ -797,128 +853,206 @@ const StudentDashboard = () => {
             {/* Payment Details Tab */}
             {activeTab === 'payments' && (
               <div className="payment-details">
-                <h3>Payment History</h3>
-                {paymentData.length > 0 ? (
-                  <div>
-                    {/* Semester Payments Table */}
-                    {(() => {
-                      const semesterPayments = paymentData.filter(payment => 
-                        payment.paymenttype && payment.paymenttype.toLowerCase().includes('semester')
-                      );
-                      return (
-                        <div style={{ marginBottom: '40px' }}>
-                          <h4 style={{ color: '#007bff', marginBottom: '20px' }}>Semester Payments</h4>
-                          {semesterPayments.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
-                                <thead>
-                                  <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Payment ID</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Year</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Semester</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Amount</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Type</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Status</th>
-                                    <th style={{ padding: '12px', border: '1px solid #ddd' }}>Date</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {semesterPayments.map((payment, index) => (
-                                    <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.paymentid}</td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.year}</td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.semester}</td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>Rs. {payment.amount}</td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.paymenttype}</td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                                        <span style={{ 
-                                          color: payment.status === 'Paid' ? 'green' : 'red',
-                                          fontWeight: 'bold'
-                                        }}>
-                                          {payment.status}
-                                        </span>
-                                      </td>
-                                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                                        {new Date(payment.date).toLocaleDateString()}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <p style={{ color: '#666', fontStyle: 'italic' }}>No semester payments found.</p>
-                          )}
+                <div style={{ marginBottom: '20px' }}>
+                  <h3>💳 Payment Details</h3>
+                  {paymentDetailsLoading && (
+                    <div style={{ color: '#666', fontStyle: 'italic', marginTop: '10px' }}>
+                      ⏳ Loading payment records...
+                    </div>
+                  )}
+                </div>
+                
+                {/* Detailed Payment Records */}
+                <div>
+                    {/* Semester Payments Section */}
+                    <div style={{ marginBottom: '40px' }}>
+                      <h4 style={{ color: '#007bff', marginBottom: '15px', borderBottom: '2px solid #007bff', paddingBottom: '5px' }}>
+                        📚 Semester Payments
+                      </h4>
+                      
+                      {semesterPayments.length > 0 ? (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ 
+                            width: '100%', 
+                            borderCollapse: 'collapse', 
+                            backgroundColor: 'white',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
+                          }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Payment ID</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Year</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Semester</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right' }}>Amount</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Status</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {semesterPayments.map((payment, index) => (
+                                <tr key={payment.paymentid} style={{ 
+                                  backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                                }}>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                                    {payment.paymentid}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    {payment.year}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    Semester {payment.semester}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', fontWeight: 'bold' }}>
+                                    {formatCurrency(payment.amount)}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                    <span style={{
+                                      padding: '4px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '12px',
+                                      fontWeight: 'bold',
+                                      color: 'white',
+                                      backgroundColor: getStatusColor(payment.status)
+                                    }}>
+                                      {payment.status || 'Pending'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    {payment.date ? new Date(payment.date).toLocaleDateString() : 'N/A'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      );
-                    })()}
+                      ) : (
+                        <p style={{ color: '#666', fontStyle: 'italic' }}>No semester payments found.</p>
+                      )}
+                    </div>
 
-                    {/* Other Payments Table (Repeat, Prorata, etc.) */}
-                    {(() => {
-                      const otherPayments = paymentData.filter(payment => 
-                        payment.paymenttype && (
-                          payment.paymenttype.toLowerCase().trim().includes('repeat') ||
-                          payment.paymenttype.toLowerCase().includes('repeat ') ||
-                          payment.paymenttype.toLowerCase().includes('prorata') ||
-                          payment.paymenttype.toLowerCase().includes('prorate') ||
-                          !payment.paymenttype.toLowerCase().includes('semester')
-                        )
-                      );
-                      return (
-                        <div>
-                          <h4 style={{ color: '#28a745', marginBottom: '20px' }}>Other Payments (Repeat, Prorata, etc.)</h4>
-                          {otherPayments.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
-                                                                 <thead>
-                                   <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Payment ID</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Year</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Semester</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Amount</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Type</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Status</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Date</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Course ID</th>
-                                     <th style={{ padding: '12px', border: '1px solid #ddd' }}>Course Name</th>
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {otherPayments.map((payment, index) => (
-                                     <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.paymentid}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.year}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.semester}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>Rs. {payment.amount}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.paymenttype}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                                         <span style={{ 
-                                           color: payment.status === 'Paid' ? 'green' : 'red',
-                                           fontWeight: 'bold'
-                                         }}>
-                                           {payment.status}
-                                         </span>
-                                       </td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                                         {new Date(payment.date).toLocaleDateString()}
-                                       </td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.cid || 'N/A'}</td>
-                                       <td style={{ padding: '12px', border: '1px solid #ddd' }}>{payment.cname || 'N/A'}</td>
-                                     </tr>
-                                   ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <p style={{ color: '#666', fontStyle: 'italic' }}>No repeat or prorata payments found.</p>
-                          )}
+                    {/* Other Payments Section */}
+                    <div>
+                      <h4 style={{ color: '#28a745', marginBottom: '15px', borderBottom: '2px solid #28a745', paddingBottom: '5px' }}>
+                        📋 Other Payments (Repeat Module / Prorata)
+                      </h4>
+                      
+                      {otherPayments.length > 0 ? (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ 
+                            width: '100%', 
+                            borderCollapse: 'collapse', 
+                            backgroundColor: 'white',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
+                          }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Payment ID</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Year</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Semester</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right' }}>Amount</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Type</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Status</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Date</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {otherPayments.map((payment, index) => (
+                                <tr key={payment.paymentid} style={{ 
+                                  backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                                }}>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                                    {payment.paymentid}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    {payment.year}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    Semester {payment.semester}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', fontWeight: 'bold' }}>
+                                    {formatCurrency(payment.amount)}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    <span style={{
+                                      padding: '3px 6px',
+                                      backgroundColor: '#e9ecef',
+                                      borderRadius: '3px',
+                                      fontSize: '11px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      {payment.paymenttype || 'Other'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                    <span style={{
+                                      padding: '4px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '12px',
+                                      fontWeight: 'bold',
+                                      color: 'white',
+                                      backgroundColor: getStatusColor(payment.status)
+                                    }}>
+                                      {payment.status || 'Pending'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    {payment.date ? new Date(payment.date).toLocaleDateString() : 'N/A'}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                    <div>
+                                      <div style={{ fontWeight: 'bold', fontSize: '12px' }}>
+                                        {payment.cid || 'N/A'}
+                                      </div>
+                                      <div style={{ fontSize: '11px', color: '#666' }}>
+                                        {payment.course?.cname || 'Course name not available'}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <p>No payment records found.</p>
-                )}
+                      ) : (
+                        <p style={{ color: '#666', fontStyle: 'italic' }}>No other payments found.</p>
+                      )}
+                    </div>
+
+                    {/* Payment Summary */}
+                    <div style={{ 
+                      marginTop: '30px', 
+                      padding: '15px', 
+                      backgroundColor: '#f8f9fa', 
+                      borderRadius: '8px',
+                      border: '1px solid #dee2e6'
+                    }}>
+                      <h5 style={{ color: '#495057', marginBottom: '10px' }}>Payment Summary</h5>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#007bff' }}>
+                            {semesterPayments.length}
+                          </div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Semester Payments</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>
+                            {otherPayments.length}
+                          </div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Other Payments</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6f42c1' }}>
+                            {formatCurrency(
+                              [...semesterPayments, ...otherPayments]
+                                .reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
+                            )}
+                          </div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Total Amount</div>
+                        </div>
+                      </div>
+                    </div>
+                </div>
               </div>
             )}
 
@@ -1187,7 +1321,6 @@ const StudentDashboard = () => {
                           {availableLectures.map((lecture, index) => {
                             const lectureDate = new Date(lecture.lecture_date);
                             const lectureStart = new Date(`${lecture.lecture_date}T${lecture.start_time}`);
-                            const lectureEnd = new Date(`${lecture.lecture_date}T${lecture.end_time}`);
                             const now = new Date();
                             
                             // Check if attendance window is open (15 min before to 30 min after start)
