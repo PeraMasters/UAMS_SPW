@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardNavBar from '../DashboardNavBar';
 import supabase from '../../lib/supabaseClient';
 import { validateAttendanceEligibility, getClientIP, getUserAgent } from '../../lib/networkUtils';
@@ -32,6 +32,60 @@ const StudentDashboard = () => {
   const [otherPayments, setOtherPayments] = useState([]);
   const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
 
+  // Semester enrollment state
+  const [currentEnrollments, setCurrentEnrollments] = useState([]);
+  const [availableCourses, setAvailableCourses] = useState([]);
+  const [selectedCourses, setSelectedCourses] = useState([]);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+
+  const fetchEnrollmentData = useCallback(async (studentSID) => {
+    try {
+      // Fetch current enrollments
+      const { data: enrollmentData, error: enrollmentError } = await supabase
+        .from('enrollment')
+        .select(`
+          *,
+          course(
+            cid,
+            cname,
+            credits,
+            lecturer_name
+          )
+        `)
+        .eq('sid', studentSID)
+        .eq('status', 'Active')
+        .order('enrollment_date', { ascending: false });
+
+      if (enrollmentError) {
+        console.error('Error fetching enrollments:', enrollmentError);
+      } else {
+        setCurrentEnrollments(enrollmentData || []);
+      }
+
+      // Fetch available courses for the student's faculty and degree
+      if (studentData?.facultyid && studentData?.degreeid) {
+        const { data: courseData, error: courseError } = await supabase
+          .from('course')
+          .select('*')
+          .eq('facultyid', studentData.facultyid)
+          .eq('degreeid', studentData.degreeid)
+          .eq('status', 'Active')
+          .order('cname');
+
+        if (courseError) {
+          console.error('Error fetching courses:', courseError);
+        } else {
+          // Filter out already enrolled courses
+          const enrolledCourseIds = (enrollmentData || []).map(enrollment => enrollment.cid);
+          const filteredCourses = (courseData || []).filter(course => !enrolledCourseIds.includes(course.cid));
+          setAvailableCourses(filteredCourses);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching enrollment data:', error);
+    }
+  }, [studentData]);
+
   useEffect(() => {
     fetchStudentData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,7 +96,12 @@ const StudentDashboard = () => {
     if (activeTab === 'payments' && studentData?.sid && semesterPayments.length === 0 && otherPayments.length === 0) {
       fetchDetailedPayments(studentData.sid);
     }
-  }, [activeTab, studentData, semesterPayments.length, otherPayments.length]);
+    
+    // Fetch enrollment data when semester enrollment tab becomes active
+    if (activeTab === 'enrollment' && studentData?.sid && currentEnrollments.length === 0 && availableCourses.length === 0) {
+      fetchEnrollmentData(studentData.sid);
+    }
+  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, fetchEnrollmentData]);
 
   const fetchStudentData = async () => {
     try {
@@ -544,6 +603,83 @@ const StudentDashboard = () => {
     return `Rs. ${parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
+  const handleCourseSelection = (courseId) => {
+    setSelectedCourses(prev => {
+      if (prev.includes(courseId)) {
+        return prev.filter(id => id !== courseId);
+      } else {
+        return [...prev, courseId];
+      }
+    });
+  };
+
+  const handleEnrollment = async () => {
+    if (selectedCourses.length === 0) {
+      alert('Please select at least one course to enroll.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to enroll in ${selectedCourses.length} course(s)?`)) {
+      return;
+    }
+
+    setEnrollmentLoading(true);
+    try {
+      // Prepare enrollment data
+      const enrollmentData = selectedCourses.map(courseId => ({
+        sid: studentData.sid,
+        cid: courseId,
+        enrollment_date: new Date().toISOString().split('T')[0],
+        status: 'Active'
+      }));
+
+      // Insert enrollments
+      const { error } = await supabase
+        .from('enrollment')
+        .insert(enrollmentData);
+
+      if (error) {
+        console.error('Enrollment error:', error);
+        alert('Failed to enroll in courses: ' + error.message);
+      } else {
+        alert('Successfully enrolled in selected courses!');
+        setSelectedCourses([]);
+        // Refresh enrollment data
+        await fetchEnrollmentData(studentData.sid);
+      }
+    } catch (error) {
+      console.error('Error during enrollment:', error);
+      alert('An unexpected error occurred during enrollment.');
+    } finally {
+      setEnrollmentLoading(false);
+    }
+  };
+
+  const handleDropCourse = async (enrollmentId, courseName) => {
+    if (!window.confirm(`Are you sure you want to drop "${courseName}"?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('enrollment')
+        .update({ status: 'Dropped' })
+        .eq('enrollment_id', enrollmentId);
+
+      if (error) {
+        console.error('Drop course error:', error);
+        alert('Failed to drop course: ' + error.message);
+      } else {
+        alert('Course dropped successfully!');
+        // Refresh enrollment data
+        await fetchEnrollmentData(studentData.sid);
+      }
+    } catch (error) {
+      console.error('Error dropping course:', error);
+      alert('An unexpected error occurred while dropping the course.');
+    }
+  };
+
 
 
   const handleInquiryFormChange = (e) => {
@@ -825,6 +961,13 @@ const StudentDashboard = () => {
                 style={{ padding: '10px 20px', margin: '0 5px', border: '1px solid #ccc', backgroundColor: activeTab === 'attendance' ? '#007bff' : 'white', color: activeTab === 'attendance' ? 'white' : 'black' }}
               >
                 Attendance
+              </button>
+              <button 
+                className={activeTab === 'enrollment' ? 'active-tab' : 'tab-button'}
+                onClick={() => setActiveTab('enrollment')}
+                style={{ padding: '10px 20px', margin: '0 5px', border: '1px solid #ccc', backgroundColor: activeTab === 'enrollment' ? '#007bff' : 'white', color: activeTab === 'enrollment' ? 'white' : 'black' }}
+              >
+                Semester Enrollment
               </button>
             </div>
 
@@ -1434,6 +1577,186 @@ const StudentDashboard = () => {
                     </div>
                   ) : (
                     <p style={{ color: '#666', fontStyle: 'italic' }}>No attendance records found.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Semester Enrollment Tab */}
+            {activeTab === 'enrollment' && (
+              <div className="semester-enrollment">
+                <h3>📚 Semester Enrollment</h3>
+                
+                {/* Current Enrollments */}
+                <div style={{ marginBottom: '40px' }}>
+                  <h4 style={{ color: '#007bff', marginBottom: '20px' }}>Current Enrollments</h4>
+                  {currentEnrollments.length > 0 ? (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        backgroundColor: 'white',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course ID</th>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course Name</th>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Credits</th>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Lecturer</th>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Enrollment Date</th>
+                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentEnrollments.map((enrollment, index) => (
+                            <tr key={enrollment.enrollment_id} style={{
+                              backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                            }}>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                                {enrollment.cid}
+                              </td>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                {enrollment.course?.cname || 'Course name not available'}
+                              </td>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                {enrollment.course?.credits || 'N/A'}
+                              </td>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                {enrollment.course?.lecturer_name || 'N/A'}
+                              </td>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                {new Date(enrollment.enrollment_date).toLocaleDateString()}
+                              </td>
+                              <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => handleDropCourse(enrollment.enrollment_id, enrollment.course?.cname)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    backgroundColor: '#dc3545',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  Drop
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>No current enrollments found.</p>
+                  )}
+                </div>
+
+                {/* Available Courses for Enrollment */}
+                <div>
+                  <h4 style={{ color: '#28a745', marginBottom: '20px' }}>Available Courses for Enrollment</h4>
+                  {availableCourses.length > 0 ? (
+                    <>
+                      <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+                        <table style={{
+                          width: '100%',
+                          borderCollapse: 'collapse',
+                          backgroundColor: 'white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Select</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course ID</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course Name</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Credits</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Lecturer</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Description</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {availableCourses.map((course, index) => (
+                              <tr key={course.cid} style={{
+                                backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                              }}>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCourses.includes(course.cid)}
+                                    onChange={() => handleCourseSelection(course.cid)}
+                                    style={{ transform: 'scale(1.2)' }}
+                                  />
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                                  {course.cid}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {course.cname}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                  {course.credits || 'N/A'}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {course.lecturer_name || 'N/A'}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {course.description || 'No description available'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {selectedCourses.length > 0 && (
+                        <div style={{ 
+                          padding: '20px', 
+                          backgroundColor: '#e8f5e8', 
+                          borderRadius: '8px',
+                          border: '1px solid #28a745'
+                        }}>
+                          <div style={{ marginBottom: '15px' }}>
+                            <strong style={{ color: '#155724' }}>
+                              Selected Courses: {selectedCourses.length}
+                            </strong>
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => setSelectedCourses([])}
+                              style={{
+                                padding: '10px 20px',
+                                backgroundColor: '#6c757d',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Clear Selection
+                            </button>
+                            <button
+                              onClick={handleEnrollment}
+                              disabled={enrollmentLoading}
+                              style={{
+                                padding: '10px 20px',
+                                backgroundColor: enrollmentLoading ? '#cccccc' : '#28a745',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: enrollmentLoading ? 'not-allowed' : 'pointer',
+                                opacity: enrollmentLoading ? 0.7 : 1
+                              }}
+                            >
+                              {enrollmentLoading ? 'Enrolling...' : `Enroll in ${selectedCourses.length} Course(s)`}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>No available courses found for your faculty and degree.</p>
                   )}
                 </div>
               </div>
