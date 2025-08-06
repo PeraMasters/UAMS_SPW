@@ -30,13 +30,51 @@ const StudentDashboard = () => {
   // Payment details state
   const [semesterPayments, setSemesterPayments] = useState([]);
   const [otherPayments, setOtherPayments] = useState([]);
-  const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
 
-  // Semester enrollment state
+  // Semester payment enrollment state
+  const [semesterEnrollments, setSemesterEnrollments] = useState([]);
+  const [showSemesterForm, setShowSemesterForm] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingEnrollmentId, setEditingEnrollmentId] = useState(null);
+  const [semesterFormData, setSemesterFormData] = useState({
+    sid: '',
+    facultyid: '',
+    degreeid: '',
+    year: 1,
+    semester: 1,
+    amount: '',
+    status: 'Pending',
+    date: new Date().toISOString().split('T')[0],
+    attachment: null
+  });
+  const [semesterFormLoading, setSemesterFormLoading] = useState(false);
+  const [faculties, setFaculties] = useState([]);
+  const [degrees, setDegrees] = useState([]);
+  const [allDegrees, setAllDegrees] = useState([]);
+
+  // Course enrollment state
   const [currentEnrollments, setCurrentEnrollments] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
   const [selectedCourses, setSelectedCourses] = useState([]);
   const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+
+  // Other payment (repeat/prorata) enrollment state
+  const [showOtherPaymentForm, setShowOtherPaymentForm] = useState(false);
+  const [isOtherEditMode, setIsOtherEditMode] = useState(false);
+  const [editingOtherPaymentId, setEditingOtherPaymentId] = useState(null);
+  const [otherPaymentFormData, setOtherPaymentFormData] = useState({
+    sid: '',
+    year: 1,
+    semester: 1,
+    amount: '',
+    paymenttype: 'Repeat Module',
+    status: 'Pending',
+    date: new Date().toISOString().split('T')[0],
+    cid: '',
+    attachment: null
+  });
+  const [otherPaymentFormLoading, setOtherPaymentFormLoading] = useState(false);
+  const [availableCoursesForOther, setAvailableCoursesForOther] = useState([]);
 
   const fetchEnrollmentData = useCallback(async (studentSID) => {
     try {
@@ -86,22 +124,132 @@ const StudentDashboard = () => {
     }
   }, [studentData]);
 
+  const fetchSemesterEnrollments = useCallback(async (studentSID) => {
+    try {
+      // Fetch semester enrollments from semester_payment table
+      const { data: semesterData, error: semesterError } = await supabase
+        .from('semester_payment')
+        .select(`
+          *,
+          faculty:facultyid(fname),
+          degree:degreeid(dname)
+        `)
+        .eq('sid', studentSID)
+        .order('year', { ascending: false })
+        .order('semester', { ascending: false });
+
+      if (semesterError) {
+        console.error('Error fetching semester enrollments:', semesterError);
+      } else {
+        setSemesterEnrollments(semesterData || []);
+      }
+
+      // Fetch faculties and degrees for form dropdowns
+      await fetchFacultiesAndDegrees();
+
+      // Pre-populate form with student data
+      if (studentData) {
+        setSemesterFormData(prev => ({
+          ...prev,
+          sid: studentData.sid || '',
+          facultyid: studentData.facultyid || '',
+          degreeid: studentData.degreeid || ''
+        }));
+      }
+
+    } catch (error) {
+      console.error('Error fetching semester enrollment data:', error);
+    }
+  }, [studentData]);
+
+  const fetchFacultiesAndDegrees = async () => {
+    try {
+      // Fetch faculties with names for dropdown display
+      const { data: facultyData, error: facultyError } = await supabase
+        .from('faculty')
+        .select('facultyid, fname')
+        .order('fname');
+
+      if (facultyError) {
+        console.error('Error fetching faculties:', facultyError);
+      } else {
+        setFaculties(facultyData || []);
+      }
+
+      // Fetch degrees with names and faculty references for dropdown display
+      const { data: degreeData, error: degreeError } = await supabase
+        .from('degree')
+        .select('degreeid, dname, facultyid')
+        .order('dname');
+
+      if (degreeError) {
+        console.error('Error fetching degrees:', degreeError);
+      } else {
+        setAllDegrees(degreeData || []);
+        setDegrees(degreeData || []);
+      }
+    } catch (error) {
+      console.error('Error fetching faculties and degrees:', error);
+    }
+  };
+
+  const fetchCoursesForOtherPayment = useCallback(async (selectedYear = null, selectedSemester = null) => {
+    try {
+      if (studentData?.degreeid) {
+        let query = supabase
+          .from('course')
+          .select('cid, cname, credits, year, semester, type')
+          .eq('degreeid', studentData.degreeid);
+
+        // Filter by year and semester if provided
+        if (selectedYear) {
+          query = query.eq('year', selectedYear);
+        }
+        if (selectedSemester) {
+          query = query.eq('semester', selectedSemester);
+        }
+
+        const { data: courseData, error: courseError } = await query.order('cname');
+
+        if (courseError) {
+          console.error('Error fetching courses for other payment:', courseError);
+        } else {
+          setAvailableCoursesForOther(courseData || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching courses for other payment:', error);
+    }
+  }, [studentData]);
+
+  // Filter degrees when faculty changes in form
+  useEffect(() => {
+    if (semesterFormData.facultyid && allDegrees.length > 0) {
+      // eslint-disable-next-line eqeqeq
+      const filteredDegrees = allDegrees.filter(degree => degree.facultyid == semesterFormData.facultyid);
+      setDegrees(filteredDegrees);
+    } else {
+      setDegrees(allDegrees);
+    }
+  }, [semesterFormData.facultyid, allDegrees]);
+
   useEffect(() => {
     fetchStudentData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Fetch detailed payments when payments tab becomes active
+    // Fetch detailed payments and semester enrollments when payments tab becomes active
     if (activeTab === 'payments' && studentData?.sid && semesterPayments.length === 0 && otherPayments.length === 0) {
       fetchDetailedPayments(studentData.sid);
+      fetchSemesterEnrollments(studentData.sid);
     }
     
     // Fetch enrollment data when semester enrollment tab becomes active
     if (activeTab === 'enrollment' && studentData?.sid && currentEnrollments.length === 0 && availableCourses.length === 0) {
       fetchEnrollmentData(studentData.sid);
     }
-  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, fetchEnrollmentData]);
+  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, fetchEnrollmentData, fetchSemesterEnrollments]);
 
   const fetchStudentData = async () => {
     try {
@@ -543,7 +691,6 @@ const StudentDashboard = () => {
   };
 
   const fetchDetailedPayments = async (studentSID) => {
-    setPaymentDetailsLoading(true);
     try {
       // Fetch semester payments
       const { data: semesterData, error: semesterError } = await supabase
@@ -559,30 +706,302 @@ const StudentDashboard = () => {
         setSemesterPayments(semesterData || []);
       }
 
-      // Fetch other payments
-      const { data: otherData, error: otherError } = await supabase
-        .from('other_payment')
-        .select(`
-          *,
-          course(
+      // Fetch repeat and prorata enrollments (try with attachment, fallback without)
+      let otherData, otherError;
+      
+      try {
+        // First try to fetch with attachment column
+        const result = await supabase
+          .from('other_payment')
+          .select(`
+            paymentid,
+            sid,
+            year,
+            semester,
+            amount,
+            paymenttype,
+            status,
+            date,
             cid,
-            cname
-          )
-        `)
-        .eq('sid', studentSID)
-        .order('year', { ascending: false })
-        .order('semester', { ascending: false });
+            attachment,
+            course(
+              cid,
+              cname
+            )
+          `)
+          .eq('sid', studentSID)
+          .order('year', { ascending: false })
+          .order('semester', { ascending: false });
+        
+        otherData = result.data;
+        otherError = result.error;
+      } catch (attachmentFetchError) {
+        // If attachment column doesn't exist, fetch without it
+        console.warn('Attachment column not available, fetching without it:', attachmentFetchError);
+        const result = await supabase
+          .from('other_payment')
+          .select(`
+            paymentid,
+            sid,
+            year,
+            semester,
+            amount,
+            paymenttype,
+            status,
+            date,
+            cid,
+            course(
+              cid,
+              cname
+            )
+          `)
+          .eq('sid', studentSID)
+          .order('year', { ascending: false })
+          .order('semester', { ascending: false });
+        
+        otherData = result.data;
+        otherError = result.error;
+      }
 
       if (otherError) {
-        console.error('Error fetching other payments:', otherError);
+        console.error('Error fetching repeat and prorata enrollments:', otherError);
       } else {
         setOtherPayments(otherData || []);
       }
 
     } catch (error) {
-      console.error('Error fetching detailed payments:', error);
+      console.error('Error fetching detailed payments and enrollments:', error);
+    }
+  };
+
+  const handleViewAttachment = (attachmentData, filename = 'payment_slip') => {
+    if (!attachmentData) {
+      alert('No attachment available');
+      return;
+    }
+
+    try {
+      // Convert array back to Uint8Array
+      const uint8Array = new Uint8Array(attachmentData);
+      
+      // Create blob and view
+      const blob = new Blob([uint8Array], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      
+      // Open in new window
+      const newWindow = window.open(url, '_blank');
+      if (!newWindow) {
+        alert('Please allow pop-ups to view the attachment');
+      }
+      
+      // Clean up the URL after a delay
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (error) {
+      console.error('Error viewing attachment:', error);
+      alert('Error viewing attachment');
+    }
+  };
+
+  const handleSemesterFormChange = (e) => {
+    const { name, value, type, files } = e.target;
+    
+    if (type === 'file') {
+      const file = files[0];
+      if (file) {
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert('File size must be less than 10MB');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+        
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+          alert('Only PDF, DOC, DOCX, JPG, and PNG files are allowed');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+      }
+      
+      setSemesterFormData(prev => ({
+        ...prev,
+        [name]: file || null
+      }));
+    } else {
+      setSemesterFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+
+      // Handle faculty change - filter degrees
+      if (name === 'facultyid') {
+        if (value) {
+          // eslint-disable-next-line eqeqeq
+          const filteredDegrees = allDegrees.filter(degree => degree.facultyid == value);
+          setDegrees(filteredDegrees);
+          setSemesterFormData(prev => ({
+            ...prev,
+            degreeid: '' // Reset degree when faculty changes
+          }));
+        } else {
+          setDegrees(allDegrees);
+          setSemesterFormData(prev => ({
+            ...prev,
+            degreeid: ''
+          }));
+        }
+      }
+    }
+  };
+
+  const handleEditEnrollment = (enrollment) => {
+    // Populate form with existing data
+    setSemesterFormData({
+      sid: enrollment.sid,
+      facultyid: enrollment.facultyid.toString(),
+      degreeid: enrollment.degreeid,
+      year: enrollment.year,
+      semester: enrollment.semester,
+      amount: enrollment.amount.toString(),
+      status: enrollment.status,
+      date: enrollment.date,
+      attachment: null // Don't pre-load attachment file
+    });
+    setIsEditMode(true);
+    setEditingEnrollmentId(enrollment.paymentid);
+    setShowSemesterForm(true);
+  };
+
+  const resetForm = () => {
+    setSemesterFormData({
+      sid: studentData?.sid || '',
+      facultyid: studentData?.facultyid || '',
+      degreeid: studentData?.degreeid || '',
+      year: 1,
+      semester: 1,
+      amount: '',
+      status: 'Pending',
+      date: new Date().toISOString().split('T')[0],
+      attachment: null
+    });
+    setIsEditMode(false);
+    setEditingEnrollmentId(null);
+    setShowSemesterForm(false);
+  };
+
+  const handleSemesterEnrollment = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!semesterFormData.sid) {
+      alert('Student ID is required.');
+      return;
+    }
+    if (!semesterFormData.facultyid) {
+      alert('Please select a faculty.');
+      return;
+    }
+    if (!semesterFormData.degreeid) {
+      alert('Please select a degree.');
+      return;
+    }
+    if (!semesterFormData.amount || parseFloat(semesterFormData.amount) <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+    if (!semesterFormData.date) {
+      alert('Please select a date.');
+      return;
+    }
+
+    // Check if already enrolled for this year and semester (only for new enrollments)
+    if (!isEditMode) {
+      const existingEnrollment = semesterEnrollments.find(
+        enrollment => enrollment.year === parseInt(semesterFormData.year) && 
+                     enrollment.semester === parseInt(semesterFormData.semester) &&
+                     enrollment.sid === semesterFormData.sid
+      );
+
+      if (existingEnrollment) {
+        alert(`Student is already enrolled for Year ${semesterFormData.year}, Semester ${semesterFormData.semester}.`);
+        return;
+      }
+    }
+
+    // Get selected faculty and degree names for confirmation message
+    const selectedFaculty = faculties.find(f => f.facultyid === parseInt(semesterFormData.facultyid));
+    const selectedDegree = degrees.find(d => d.degreeid === semesterFormData.degreeid);
+    
+    const confirmationMessage = `Are you sure you want to ${isEditMode ? 'update' : 'enroll for'}:
+    
+• Student ID: ${semesterFormData.sid}
+• Faculty: ${selectedFaculty?.fname || 'Unknown'}
+• Degree: ${selectedDegree?.dname || 'Unknown'}
+• Year: ${semesterFormData.year}
+• Semester: ${semesterFormData.semester}
+• Amount: Rs. ${parseFloat(semesterFormData.amount).toLocaleString()}
+• Status: ${semesterFormData.status}`;
+
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
+    setSemesterFormLoading(true);
+    try {
+      let attachmentData = null;
+
+      // Handle file upload if attachment is provided
+      if (semesterFormData.attachment) {
+        const file = semesterFormData.attachment;
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        attachmentData = Array.from(uint8Array);
+      }
+
+      const enrollmentData = {
+        sid: semesterFormData.sid,
+        facultyid: parseInt(semesterFormData.facultyid),
+        degreeid: semesterFormData.degreeid,
+        year: parseInt(semesterFormData.year),
+        semester: parseInt(semesterFormData.semester),
+        amount: parseFloat(semesterFormData.amount),
+        status: semesterFormData.status,
+        date: semesterFormData.date,
+        attachment: attachmentData
+      };
+
+      let error;
+      if (isEditMode) {
+        // Update existing enrollment
+        const { error: updateError } = await supabase
+          .from('semester_payment')
+          .update(enrollmentData)
+          .eq('paymentid', editingEnrollmentId);
+        error = updateError;
+      } else {
+        // Insert new enrollment
+        const { error: insertError } = await supabase
+          .from('semester_payment')
+          .insert([enrollmentData]);
+        error = insertError;
+      }
+
+      if (error) {
+        console.error('Semester enrollment error:', error);
+        alert(`Failed to ${isEditMode ? 'update' : 'enroll for'} semester: ` + error.message);
+      } else {
+        alert(`Successfully ${isEditMode ? 'updated' : 'enrolled for'} the semester!`);
+        resetForm();
+        // Refresh enrollment data
+        await fetchSemesterEnrollments(studentData.sid);
+        await fetchDetailedPayments(studentData.sid);
+      }
+    } catch (error) {
+      console.error('Error during semester enrollment:', error);
+      alert('An unexpected error occurred during semester enrollment.');
     } finally {
-      setPaymentDetailsLoading(false);
+      setSemesterFormLoading(false);
     }
   };
 
@@ -677,6 +1096,237 @@ const StudentDashboard = () => {
     } catch (error) {
       console.error('Error dropping course:', error);
       alert('An unexpected error occurred while dropping the course.');
+    }
+  };
+
+
+
+  const handleOtherPaymentFormChange = (e) => {
+    const { name, value, type, files } = e.target;
+    
+    if (type === 'file') {
+      const file = files[0];
+      if (file) {
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert('File size must be less than 10MB');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+        
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+          alert('Only PDF, DOC, DOCX, JPG, and PNG files are allowed');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+      }
+      
+      setOtherPaymentFormData(prev => ({
+        ...prev,
+        [name]: file || null
+      }));
+    } else {
+      setOtherPaymentFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+
+      // Fetch courses when year or semester changes
+      if (name === 'year' || name === 'semester') {
+        const newFormData = { ...otherPaymentFormData, [name]: value };
+        
+        // Reset course selection when year/semester changes
+        setOtherPaymentFormData(prevData => ({
+          ...prevData,
+          [name]: value,
+          cid: '' // Clear course selection
+        }));
+        
+        // Fetch courses for the new year/semester combination
+        if (newFormData.year && newFormData.semester) {
+          fetchCoursesForOtherPayment(parseInt(newFormData.year), parseInt(newFormData.semester));
+        }
+      }
+    }
+  };
+
+  const handleEditOtherPayment = (payment) => {
+    // Populate form with existing data
+    setOtherPaymentFormData({
+      sid: payment.sid,
+      year: payment.year,
+      semester: payment.semester,
+      amount: payment.amount.toString(),
+      paymenttype: payment.paymenttype,
+      status: payment.status,
+      date: payment.date,
+      cid: payment.cid,
+      attachment: null // Don't pre-load attachment file
+    });
+    setIsOtherEditMode(true);
+    setEditingOtherPaymentId(payment.paymentid);
+    setShowOtherPaymentForm(true);
+    
+    // Load courses for the payment's year and semester
+    if (payment.year && payment.semester) {
+      fetchCoursesForOtherPayment(payment.year, payment.semester);
+    }
+  };
+
+  const resetOtherPaymentForm = () => {
+    setOtherPaymentFormData({
+      sid: studentData?.sid || '',
+      year: 1,
+      semester: 1,
+      amount: '',
+      paymenttype: 'Repeat Module',
+      status: 'Pending',
+      date: new Date().toISOString().split('T')[0],
+      cid: '',
+      attachment: null
+    });
+    setIsOtherEditMode(false);
+    setEditingOtherPaymentId(null);
+    setShowOtherPaymentForm(false);
+    
+    // Load courses for default year and semester when form is opened
+    if (studentData?.degreeid) {
+      fetchCoursesForOtherPayment(1, 1); // Default to year 1, semester 1
+    }
+  };
+
+  const handleOtherPaymentEnrollment = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!otherPaymentFormData.sid) {
+      alert('Student ID is required.');
+      return;
+    }
+    if (!otherPaymentFormData.cid) {
+      alert('Please select a course.');
+      return;
+    }
+    if (!otherPaymentFormData.amount || parseFloat(otherPaymentFormData.amount) <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+    if (!otherPaymentFormData.date) {
+      alert('Please select a date.');
+      return;
+    }
+
+    // Get selected course name for confirmation message
+    const selectedCourse = availableCoursesForOther.find(c => c.cid === otherPaymentFormData.cid);
+    
+    const confirmationMessage = `Are you sure you want to ${isOtherEditMode ? 'update' : 'enroll for'}:
+    
+• Student ID: ${otherPaymentFormData.sid}
+• Course: ${selectedCourse?.cname || otherPaymentFormData.cid}
+• Payment Type: ${otherPaymentFormData.paymenttype}
+• Year: ${otherPaymentFormData.year}
+• Semester: ${otherPaymentFormData.semester}
+• Amount: Rs. ${parseFloat(otherPaymentFormData.amount).toLocaleString()}
+• Status: ${otherPaymentFormData.status}`;
+
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
+    setOtherPaymentFormLoading(true);
+    try {
+      let attachmentData = null;
+
+      // Handle file upload if attachment is provided
+      if (otherPaymentFormData.attachment) {
+        const file = otherPaymentFormData.attachment;
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        attachmentData = Array.from(uint8Array);
+      }
+
+      // Explicitly create enrollment data without paymentid (auto-increment field)
+      const enrollmentData = {
+        sid: otherPaymentFormData.sid,
+        year: parseInt(otherPaymentFormData.year),
+        semester: parseInt(otherPaymentFormData.semester),
+        amount: parseFloat(otherPaymentFormData.amount),
+        paymenttype: otherPaymentFormData.paymenttype,
+        status: otherPaymentFormData.status,
+        date: otherPaymentFormData.date,
+        cid: otherPaymentFormData.cid
+      };
+
+      // Ensure no paymentid is accidentally included
+      delete enrollmentData.paymentid;
+
+      // Debug logging
+      console.log('Enrollment Data to be sent:', enrollmentData);
+      console.log('Is Edit Mode:', isOtherEditMode);
+      console.log('Editing Payment ID:', editingOtherPaymentId);
+
+      let error;
+      let result;
+      
+      if (isOtherEditMode) {
+        // Update existing enrollment
+        result = await supabase
+          .from('other_payment')
+          .update(enrollmentData)
+          .eq('paymentid', editingOtherPaymentId)
+          .select();
+        error = result.error;
+      } else {
+        // Insert new enrollment
+        result = await supabase
+          .from('other_payment')
+          .insert([enrollmentData])
+          .select();
+        error = result.error;
+      }
+
+      // If the main operation succeeded and we have an attachment, try to update it separately
+      if (!error && attachmentData && result.data && result.data.length > 0) {
+        const recordId = isOtherEditMode ? editingOtherPaymentId : result.data[0].paymentid;
+        
+        try {
+          // Try to include attachment in the enrollment data first
+          const attachmentUpdate = { attachment: attachmentData };
+          const { error: attachmentError } = await supabase
+            .from('other_payment')
+            .update(attachmentUpdate)
+            .eq('paymentid', recordId);
+          
+          if (attachmentError) {
+            console.warn('Attachment upload failed:', attachmentError);
+            if (attachmentError.message && attachmentError.message.includes('attachment')) {
+              alert('Note: Payment slip upload is not available yet, but enrollment was saved successfully.');
+            }
+          } else {
+            console.log('Attachment uploaded successfully');
+          }
+        } catch (attachmentErr) {
+          console.warn('Attachment column not available:', attachmentErr);
+          alert('Note: Payment slip upload is not available yet, but enrollment was saved successfully.');
+        }
+      }
+
+      if (error) {
+        console.error('Other payment enrollment error:', error);
+        alert(`Failed to ${isOtherEditMode ? 'update' : 'enroll for'} repeat/prorata: ` + error.message);
+      } else {
+        alert(`Successfully ${isOtherEditMode ? 'updated' : 'enrolled for'} repeat/prorata enrollment!`);
+        resetOtherPaymentForm();
+        // Refresh payment data
+        await fetchDetailedPayments(studentData.sid);
+      }
+    } catch (error) {
+      console.error('Error during other payment enrollment:', error);
+      alert('An unexpected error occurred during repeat/prorata enrollment.');
+    } finally {
+      setOtherPaymentFormLoading(false);
     }
   };
 
@@ -996,99 +1646,832 @@ const StudentDashboard = () => {
             {/* Payment Details Tab */}
             {activeTab === 'payments' && (
               <div className="payment-details">
-                <div style={{ marginBottom: '20px' }}>
-                  <h3>💳 Payment Details</h3>
-                  {paymentDetailsLoading && (
-                    <div style={{ color: '#666', fontStyle: 'italic', marginTop: '10px' }}>
-                      ⏳ Loading payment records...
+
+                {/* Semester Enrollment Section */}
+                        <div style={{ marginBottom: '40px' }}>
+                  <h3 style={{ color: '#007bff', marginBottom: '20px', borderBottom: '2px solid #007bff', paddingBottom: '5px' }}>
+                    📚 Semester Enrollment
+                  </h3>
+                  
+                  {/* Enroll Button */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <button
+                      onClick={() => {
+                        resetForm();
+                        setShowSemesterForm(true);
+                      }}
+                      style={{
+                        padding: '12px 24px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      ➕ Enroll for New Semester
+                    </button>
+                  </div>
+                  
+                  {/* Semester Enrollment Form Modal */}
+                  {showSemesterForm && (
+                    <div style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      zIndex: 1000
+                    }}>
+                      <div style={{
+                        backgroundColor: 'white',
+                        padding: '30px',
+                        borderRadius: '8px',
+                        width: '100%',
+                        maxWidth: '800px',
+                        maxHeight: '90vh',
+                        overflowY: 'auto',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                          <h3 style={{ margin: 0, color: '#007bff' }}>
+                            {isEditMode ? '✏️ Edit Semester Enrollment' : '➕ New Semester Enrollment'}
+                          </h3>
+                          <button
+                            onClick={() => resetForm()}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              fontSize: '24px',
+                              cursor: 'pointer',
+                              color: '#666'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleSemesterEnrollment}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Student ID *
+                              </label>
+                              <input
+                                type="text"
+                                name="sid"
+                                value={semesterFormData.sid}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                                placeholder="Enter student ID"
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Faculty *
+                              </label>
+                              <select
+                                name="facultyid"
+                                value={semesterFormData.facultyid}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                <option value="">{faculties.length > 0 ? 'Select Faculty' : 'Loading faculties...'}</option>
+                                {faculties.map(faculty => (
+                                  <option key={faculty.facultyid} value={faculty.facultyid}>
+                                    {faculty.fname}
+                                  </option>
+                                ))}
+                              </select>
+                              {faculties.length === 0 && (
+                                <small style={{ color: '#dc3545', fontSize: '12px' }}>
+                                  No faculties loaded. Please refresh the page.
+                                </small>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Degree *
+                              </label>
+                              <select
+                                name="degreeid"
+                                value={semesterFormData.degreeid}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                <option value="">{degrees.length > 0 ? 'Select Degree' : 'Loading degrees...'}</option>
+                                {degrees.map(degree => (
+                                  <option key={degree.degreeid} value={degree.degreeid}>
+                                    {degree.dname}
+                                  </option>
+                                ))}
+                              </select>
+                              {degrees.length === 0 && allDegrees.length > 0 && (
+                                <small style={{ color: '#ffc107', fontSize: '12px' }}>
+                                  Please select a faculty first to see available degrees.
+                                </small>
+                              )}
+                              {allDegrees.length === 0 && (
+                                <small style={{ color: '#dc3545', fontSize: '12px' }}>
+                                  No degrees loaded. Please refresh the page.
+                                </small>
+                              )}
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Academic Year *
+                              </label>
+                              <select
+                                name="year"
+                                value={semesterFormData.year}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                {[1, 2, 3, 4].map(year => (
+                                  <option key={year} value={year}>
+                                    {year}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Semester *
+                              </label>
+                              <select
+                                name="semester"
+                                value={semesterFormData.semester}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                <option value={1}>Semester 1</option>
+                                <option value={2}>Semester 2</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Amount (Rs.) *
+                              </label>
+                              <input
+                                type="number"
+                                name="amount"
+                                value={semesterFormData.amount}
+                                onChange={handleSemesterFormChange}
+                                required
+                                min="0"
+                                step="0.01"
+                                placeholder="Enter amount"
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Status *
+                              </label>
+                                                              <input
+                                  type="text"
+                                  name="status"
+                                  value={semesterFormData.status}
+                                  readOnly
+                                  style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    fontSize: '14px',
+                                    backgroundColor: '#f8f9fa',
+                                    color: '#6c757d',
+                                    cursor: 'not-allowed'
+                                  }}
+                                />
+                                <small style={{ color: '#6c757d', fontSize: '12px', display: 'block', marginTop: '5px' }}>
+                                  Status is automatically managed by the system
+                                </small>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                Date *
+                              </label>
+                              <input
+                                type="date"
+                                name="date"
+                                value={semesterFormData.date}
+                                onChange={handleSemesterFormChange}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: '15px' }}>
+                            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                              Payment Slip Attachment (Optional)
+                            </label>
+                            <input
+                              type="file"
+                              name="attachment"
+                              onChange={handleSemesterFormChange}
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              style={{
+                                width: '100%',
+                                padding: '10px',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                              }}
+                            />
+                            <small style={{ color: '#666', fontSize: '12px' }}>
+                              Upload payment slip (PDF, DOC, DOCX, JPG, PNG - Max: 10MB)
+                            </small>
+                            {semesterFormData.attachment && (
+                              <div style={{ marginTop: '5px', fontSize: '12px', color: '#28a745' }}>
+                                Selected: {semesterFormData.attachment.name} ({(semesterFormData.attachment.size / 1024 / 1024).toFixed(2)} MB)
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button
+                              type="button"
+                              onClick={() => resetForm()}
+                              style={{
+                                padding: '10px 20px',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px',
+                                backgroundColor: 'white',
+                                cursor: 'pointer',
+                                fontSize: '14px'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={semesterFormLoading}
+                              style={{
+                                padding: '10px 20px',
+                                border: 'none',
+                                borderRadius: '4px',
+                                backgroundColor: semesterFormLoading ? '#cccccc' : (isEditMode ? '#28a745' : '#007bff'),
+                                color: 'white',
+                                cursor: semesterFormLoading ? 'not-allowed' : 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {semesterFormLoading 
+                                ? (isEditMode ? 'Updating...' : 'Enrolling...') 
+                                : (isEditMode ? '✏️ Update Enrollment' : '➕ Enroll for Semester')
+                              }
+                            </button>
+                          </div>
+                        </form>
+                      </div>
                     </div>
                   )}
+                  
+                  {/* Semester Enrollment Records */}
+                  <div style={{ marginBottom: '30px' }}>
+                    <h4 style={{ color: '#007bff', marginBottom: '15px' }}>Your Semester Enrollment Payments</h4>
+                    {semesterEnrollments.length > 0 ? (
+                            <div style={{ overflowX: 'auto' }}>
+                        <table style={{
+                          width: '100%',
+                          borderCollapse: 'collapse',
+                          backgroundColor: 'white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                                <thead>
+                                  <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Payment ID</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Year</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Semester</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Faculty</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Degree</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right' }}>Amount</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Status</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Payment Date</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Payment Slip</th>
+                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                            {semesterEnrollments.map((enrollment, index) => (
+                              <tr key={enrollment.paymentid} style={{
+                                backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                              }}>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center', fontWeight: 'bold' }}>
+                                  {enrollment.paymentid}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center', fontWeight: 'bold' }}>
+                                  {enrollment.year}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                  {enrollment.semester}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {enrollment.faculty?.fname || 'N/A'}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {enrollment.degree?.dname || 'N/A'}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', fontWeight: 'bold' }}>
+                                  {formatCurrency(enrollment.amount)}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                        <span style={{ 
+                                    padding: '4px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '12px',
+                                    fontWeight: 'bold',
+                                    color: 'white',
+                                    backgroundColor: getStatusColor(enrollment.status)
+                                  }}>
+                                    {enrollment.status || 'Pending'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                                  {enrollment.date ? new Date(enrollment.date).toLocaleDateString() : 'N/A'}
+                                </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                  {enrollment.attachment ? (
+                                    <span style={{
+                                      padding: '3px 8px',
+                                      backgroundColor: '#28a745',
+                                      color: 'white',
+                                      borderRadius: '12px',
+                                      fontSize: '11px',
+                                          fontWeight: 'bold'
+                                        }}>
+                                      📎 Uploaded
+                                        </span>
+                                  ) : (
+                                    <span style={{
+                                      padding: '3px 8px',
+                                      backgroundColor: '#6c757d',
+                                      color: 'white',
+                                      borderRadius: '12px',
+                                      fontSize: '11px'
+                                    }}>
+                                      No File
+                                    </span>
+                                  )}
+                                      </td>
+                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => handleEditEnrollment(enrollment)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      backgroundColor: '#28a745',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontSize: '12px',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    ✏️ Update
+                                  </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                      <p style={{ color: '#666', fontStyle: 'italic' }}>No semester enrollment payments found.</p>
+                          )}
+                        </div>
                 </div>
                 
                 {/* Detailed Payment Records */}
-                <div>
-                    {/* Semester Payments Section */}
-                    <div style={{ marginBottom: '40px' }}>
-                      <h4 style={{ color: '#007bff', marginBottom: '15px', borderBottom: '2px solid #007bff', paddingBottom: '5px' }}>
-                        📚 Semester Payments
-                      </h4>
-                      
-                      {semesterPayments.length > 0 ? (
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ 
-                            width: '100%', 
-                            borderCollapse: 'collapse', 
-                            backgroundColor: 'white',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
-                          }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Payment ID</th>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Year</th>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Semester</th>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right' }}>Amount</th>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Status</th>
-                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Date</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {semesterPayments.map((payment, index) => (
-                                <tr key={payment.paymentid} style={{ 
-                                  backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
-                                }}>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
-                                    {payment.paymentid}
-                                  </td>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                    {payment.year}
-                                  </td>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                    Semester {payment.semester}
-                                  </td>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', fontWeight: 'bold' }}>
-                                    {formatCurrency(payment.amount)}
-                                  </td>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                                    <span style={{
-                                      padding: '4px 8px',
-                                      borderRadius: '12px',
-                                      fontSize: '12px',
-                                      fontWeight: 'bold',
-                                      color: 'white',
-                                      backgroundColor: getStatusColor(payment.status)
-                                    }}>
-                                      {payment.status || 'Pending'}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                    {payment.date ? new Date(payment.date).toLocaleDateString() : 'N/A'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <p style={{ color: '#666', fontStyle: 'italic' }}>No semester payments found.</p>
-                      )}
-                    </div>
+                        <div>
 
-                    {/* Other Payments Section */}
+
+                    {/* Repeat and Prorata Enrollment Section */}
                     <div>
                       <h4 style={{ color: '#28a745', marginBottom: '15px', borderBottom: '2px solid #28a745', paddingBottom: '5px' }}>
-                        📋 Other Payments (Repeat Module / Prorata)
+                        📋 Repeat and Prorata Enrollment
                       </h4>
                       
-                      {otherPayments.length > 0 ? (
-                        <div style={{ overflowX: 'auto' }}>
+                      {/* Enroll Button */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <button
+                          onClick={() => {
+                            resetOtherPaymentForm();
+                            setShowOtherPaymentForm(true);
+                          }}
+                          style={{
+                            padding: '12px 24px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ➕ Enroll for Repeat/Prorata
+                        </button>
+                      </div>
+                      
+                      {/* Other Payment Form Modal */}
+                      {showOtherPaymentForm && (
+                        <div style={{
+                          position: 'fixed',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: 'rgba(0,0,0,0.5)',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          zIndex: 1000
+                        }}>
+                          <div style={{
+                            backgroundColor: 'white',
+                            padding: '30px',
+                            borderRadius: '8px',
+                            width: '100%',
+                            maxWidth: '800px',
+                            maxHeight: '90vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                              <h3 style={{ margin: 0, color: '#28a745' }}>
+                                {isOtherEditMode ? '✏️ Edit Repeat/Prorata Enrollment' : '➕ New Repeat/Prorata Enrollment'}
+                              </h3>
+                              <button
+                                onClick={() => resetOtherPaymentForm()}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  fontSize: '24px',
+                                  cursor: 'pointer',
+                                  color: '#666'
+                                }}
+                              >
+                                ×
+                              </button>
+                            </div>
+
+                            <form onSubmit={handleOtherPaymentEnrollment}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Student ID *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    name="sid"
+                                    value={otherPaymentFormData.sid}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                    placeholder="Enter student ID"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Course *
+                                  </label>
+                                  <select
+                                    name="cid"
+                                    value={otherPaymentFormData.cid}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    <option value="">
+                                      {availableCoursesForOther.length > 0 
+                                        ? 'Select Course' 
+                                        : otherPaymentFormData.year && otherPaymentFormData.semester 
+                                          ? 'No courses available for this year/semester' 
+                                          : 'Select year and semester first'
+                                      }
+                                    </option>
+                                    {availableCoursesForOther.map(course => (
+                                      <option key={course.cid} value={course.cid}>
+                                        {course.cid} - {course.cname} ({course.credits} credits, {course.type})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {availableCoursesForOther.length === 0 && otherPaymentFormData.year && otherPaymentFormData.semester && (
+                                    <small style={{ color: '#ffc107', fontSize: '12px', display: 'block', marginTop: '5px' }}>
+                                      No courses available for Year {otherPaymentFormData.year}, Semester {otherPaymentFormData.semester}
+                                    </small>
+                                  )}
+                                  {(!otherPaymentFormData.year || !otherPaymentFormData.semester) && (
+                                    <small style={{ color: '#6c757d', fontSize: '12px', display: 'block', marginTop: '5px' }}>
+                                      Please select academic year and semester to view available courses
+                                    </small>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Academic Year *
+                                  </label>
+                                  <select
+                                    name="year"
+                                    value={otherPaymentFormData.year}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    {[1, 2, 3, 4].map(year => (
+                                      <option key={year} value={year}>
+                                        {year}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Semester *
+                                  </label>
+                                  <select
+                                    name="semester"
+                                    value={otherPaymentFormData.semester}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    <option value={1}>Semester 1</option>
+                                    <option value={2}>Semester 2</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Payment Type *
+                                  </label>
+                                  <select
+                                    name="paymenttype"
+                                    value={otherPaymentFormData.paymenttype}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    <option value="Repeat Module">Repeat Module</option>
+                                    <option value="Prorata">Prorata</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Amount (Rs.) *
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="amount"
+                                    value={otherPaymentFormData.amount}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Enter amount"
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Status *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    name="status"
+                                    value={otherPaymentFormData.status}
+                                    readOnly
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px',
+                                      backgroundColor: '#f8f9fa',
+                                      color: '#6c757d',
+                                      cursor: 'not-allowed'
+                                    }}
+                                  />
+                                  <small style={{ color: '#6c757d', fontSize: '12px', display: 'block', marginTop: '5px' }}>
+                                    Status is automatically managed by the system
+                                  </small>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                    Payment Date *
+                                  </label>
+                                  <input
+                                    type="date"
+                                    name="date"
+                                    value={otherPaymentFormData.date}
+                                    onChange={handleOtherPaymentFormChange}
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '14px'
+                                    }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={{ marginBottom: '15px' }}>
+                                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                                  Payment Slip Attachment (Optional)
+                                </label>
+                                <input
+                                  type="file"
+                                  name="attachment"
+                                  onChange={handleOtherPaymentFormChange}
+                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                  style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    fontSize: '14px'
+                                  }}
+                                />
+                                <small style={{ color: '#666', fontSize: '12px' }}>
+                                  Upload payment slip (PDF, DOC, DOCX, JPG, PNG - Max: 10MB)
+                                </small>
+                                {otherPaymentFormData.attachment && (
+                                  <div style={{ marginTop: '5px', fontSize: '12px', color: '#28a745' }}>
+                                    Selected: {otherPaymentFormData.attachment.name} ({(otherPaymentFormData.attachment.size / 1024 / 1024).toFixed(2)} MB)
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => resetOtherPaymentForm()}
+                                  style={{
+                                    padding: '10px 20px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    backgroundColor: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={otherPaymentFormLoading}
+                                  style={{
+                                    padding: '10px 20px',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    backgroundColor: otherPaymentFormLoading ? '#cccccc' : (isOtherEditMode ? '#ffc107' : '#28a745'),
+                                    color: 'white',
+                                    cursor: otherPaymentFormLoading ? 'not-allowed' : 'pointer',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {otherPaymentFormLoading 
+                                    ? (isOtherEditMode ? 'Updating...' : 'Enrolling...') 
+                                    : (isOtherEditMode ? '✏️ Update Enrollment' : '➕ Enroll for Repeat/Prorata')
+                                  }
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+                      
+                          {otherPayments.length > 0 ? (
+                            <div style={{ overflowX: 'auto' }}>
                           <table style={{ 
                             width: '100%', 
                             borderCollapse: 'collapse', 
                             backgroundColor: 'white',
                             boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
                           }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
+                                                                 <thead>
+                                   <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Payment ID</th>
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Year</th>
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Semester</th>
@@ -1097,10 +2480,12 @@ const StudentDashboard = () => {
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Status</th>
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Date</th>
                                 <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {otherPayments.map((payment, index) => (
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Payment Slip</th>
+                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Actions</th>
+                                   </tr>
+                                 </thead>
+                                 <tbody>
+                                   {otherPayments.map((payment, index) => (
                                 <tr key={payment.paymentid} style={{ 
                                   backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
                                 }}>
@@ -1111,22 +2496,22 @@ const StudentDashboard = () => {
                                     {payment.year}
                                   </td>
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                    Semester {payment.semester}
+                                    {payment.semester}
                                   </td>
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', fontWeight: 'bold' }}>
                                     {formatCurrency(payment.amount)}
                                   </td>
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                    <span style={{
+                                         <span style={{ 
                                       padding: '3px 6px',
                                       backgroundColor: '#e9ecef',
                                       borderRadius: '3px',
                                       fontSize: '11px',
-                                      fontWeight: 'bold'
-                                    }}>
+                                           fontWeight: 'bold'
+                                         }}>
                                       {payment.paymenttype || 'Other'}
-                                    </span>
-                                  </td>
+                                         </span>
+                                       </td>
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
                                     <span style={{
                                       padding: '4px 8px',
@@ -1138,7 +2523,7 @@ const StudentDashboard = () => {
                                     }}>
                                       {payment.status || 'Pending'}
                                     </span>
-                                  </td>
+                                       </td>
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
                                     {payment.date ? new Date(payment.date).toLocaleDateString() : 'N/A'}
                                   </td>
@@ -1152,15 +2537,60 @@ const StudentDashboard = () => {
                                       </div>
                                     </div>
                                   </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                    {payment.attachment ? (
+                                      <span 
+                                        onClick={() => handleViewAttachment(payment.attachment)}
+                                        style={{
+                                          padding: '3px 8px',
+                                          backgroundColor: '#28a745',
+                                          color: 'white',
+                                          borderRadius: '12px',
+                                          fontSize: '11px',
+                                          fontWeight: 'bold',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        📎 View
+                                      </span>
+                                    ) : (
+                                      <span style={{
+                                        padding: '3px 8px',
+                                        backgroundColor: '#6c757d',
+                                        color: 'white',
+                                        borderRadius: '12px',
+                                        fontSize: '11px'
+                                      }}>
+                                        No File
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                    <button
+                                      onClick={() => handleEditOtherPayment(payment)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        backgroundColor: '#ffc107',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold'
+                                      }}
+                                    >
+                                      ✏️ Update
+                                    </button>
+                                  </td>
+                                     </tr>
+                                   ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                        <p style={{ color: '#666', fontStyle: 'italic' }}>No repeat and prorata enrollments found.</p>
+                          )}
                         </div>
-                      ) : (
-                        <p style={{ color: '#666', fontStyle: 'italic' }}>No other payments found.</p>
-                      )}
-                    </div>
 
                     {/* Payment Summary */}
                     <div style={{ 
@@ -1171,18 +2601,22 @@ const StudentDashboard = () => {
                       border: '1px solid #dee2e6'
                     }}>
                       <h5 style={{ color: '#495057', marginBottom: '10px' }}>Payment Summary</h5>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
                         <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#007bff' }}>
-                            {semesterPayments.length}
-                          </div>
+                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#007bff' }}>
+                            {formatCurrency(
+                              semesterPayments.reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
+                            )}
+                  </div>
                           <div style={{ color: '#666', fontSize: '12px' }}>Semester Payments</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>
-                            {otherPayments.length}
+                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745' }}>
+                            {formatCurrency(
+                              otherPayments.reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
+                            )}
                           </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>Other Payments</div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Repeat/Prorata Total</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6f42c1' }}>
@@ -1191,7 +2625,7 @@ const StudentDashboard = () => {
                                 .reduce((total, payment) => total + (parseFloat(payment.amount) || 0), 0)
                             )}
                           </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>Total Amount</div>
+                          <div style={{ color: '#666', fontSize: '12px' }}>Grand Total</div>
                         </div>
                       </div>
                     </div>
@@ -1648,7 +3082,7 @@ const StudentDashboard = () => {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+          </div>
                   ) : (
                     <p style={{ color: '#666', fontStyle: 'italic' }}>No current enrollments found.</p>
                   )}
