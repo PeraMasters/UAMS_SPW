@@ -31,6 +31,13 @@ const StudentDashboard = () => {
   const [semesterPayments, setSemesterPayments] = useState([]);
   const [otherPayments, setOtherPayments] = useState([]);
 
+  // Enrolled modules state
+  const [enrolledModules, setEnrolledModules] = useState({
+    semester: [],
+    prorata: [],
+    repeat: []
+  });
+
   // Semester payment enrollment state
   const [semesterEnrollments, setSemesterEnrollments] = useState([]);
   const [showSemesterForm, setShowSemesterForm] = useState(false);
@@ -55,8 +62,11 @@ const StudentDashboard = () => {
   // Course enrollment state
   const [currentEnrollments, setCurrentEnrollments] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
-  const [selectedCourses, setSelectedCourses] = useState([]);
-  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+
+  // Timetable state
+  const [classSchedule, setClassSchedule] = useState([]);
+  const [examSchedule, setExamSchedule] = useState([]);
+  const [timetableLoading, setTimetableLoading] = useState(false);
 
   // Other payment (repeat/prorata) enrollment state
   const [showOtherPaymentForm, setShowOtherPaymentForm] = useState(false);
@@ -193,6 +203,110 @@ const StudentDashboard = () => {
     }
   };
 
+  // Fetch enrolled modules data
+  const fetchEnrolledModules = useCallback(async () => {
+    if (!studentData?.sid) return;
+
+    try {
+      // Fetch semester modules from semester_payment with completed status
+      const { data: semesterData, error: semesterError } = await supabase
+        .from('semester_payment')
+        .select(`
+          paymentid,
+          year,
+          semester,
+          status,
+          date,
+          degreeid,
+          degree:degreeid (
+            degreeid,
+            dname
+          )
+        `)
+        .eq('sid', studentData.sid)
+        .eq('status', 'Completed')
+        .order('year', { ascending: false })
+        .order('semester', { ascending: false });
+
+      // For each semester enrollment, fetch the courses for that year/semester/degree
+      let enrichedSemesterData = [];
+      if (semesterData && semesterData.length > 0) {
+        enrichedSemesterData = await Promise.all(
+          semesterData.map(async (semesterModule) => {
+            // Fetch courses for this specific year, semester, and degree
+            const { data: coursesData, error: coursesError } = await supabase
+              .from('course')
+              .select(`
+                cid,
+                cname,
+                credits,
+                year,
+                semester,
+                type
+              `)
+              .eq('year', semesterModule.year)
+              .eq('semester', semesterModule.semester)
+              .eq('degreeid', semesterModule.degreeid)
+              .order('cid');
+
+            if (coursesError) {
+              console.error('Error fetching courses for semester:', coursesError);
+              return { ...semesterModule, courses: [] };
+            }
+
+            return { ...semesterModule, courses: coursesData || [] };
+          })
+        );
+      }
+
+      // Fetch prorata and repeat modules from other_payment with completed status
+      const { data: otherData, error: otherError } = await supabase
+        .from('other_payment')
+        .select(`
+          paymentid,
+          sid,
+          year,
+          semester,
+          amount,
+          paymenttype,
+          status,
+          date,
+          cid,
+          attachment,
+          course:cid (
+            cid,
+            cname,
+            credits,
+            type
+          )
+        `)
+        .eq('sid', studentData.sid)
+        .eq('status', 'Completed')
+        .order('date', { ascending: false });
+
+      if (semesterError) {
+        console.error('Error fetching semester modules:', semesterError);
+      }
+
+      if (otherError) {
+        console.error('Error fetching other modules:', otherError);
+      }
+
+      // Group other modules by payment type
+      const prorataModules = otherData?.filter(item => item.paymenttype === 'Prorata') || [];
+      const repeatModules = otherData?.filter(item => item.paymenttype === 'Repeat Module') || [];
+
+      setEnrolledModules({
+        semester: enrichedSemesterData || [],
+        prorata: prorataModules,
+        repeat: repeatModules
+      });
+
+    } catch (error) {
+      console.error('Error fetching enrolled modules:', error);
+    }
+  }, [studentData?.sid]);
+
   const fetchCoursesForOtherPayment = useCallback(async (selectedYear = null, selectedSemester = null) => {
     try {
       if (studentData?.degreeid) {
@@ -245,11 +359,17 @@ const StudentDashboard = () => {
       fetchSemesterEnrollments(studentData.sid);
     }
     
-    // Fetch enrollment data when semester enrollment tab becomes active
+    // Fetch enrollment data when enrolled modules tab becomes active
     if (activeTab === 'enrollment' && studentData?.sid && currentEnrollments.length === 0 && availableCourses.length === 0) {
       fetchEnrollmentData(studentData.sid);
+      fetchEnrolledModules();
     }
-  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, fetchEnrollmentData, fetchSemesterEnrollments]);
+
+    // Fetch timetable data when timetable tab becomes active
+    if (activeTab === 'timetable' && studentData?.sid && classSchedule.length === 0 && examSchedule.length === 0) {
+      fetchTimetableData(studentData.sid);
+    }
+  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, classSchedule.length, examSchedule.length, fetchEnrollmentData, fetchSemesterEnrollments, fetchEnrolledModules]);
 
   const fetchStudentData = async () => {
     try {
@@ -614,6 +734,513 @@ const StudentDashboard = () => {
         checking: false,
         timestamp: new Date()
       });
+    }
+  };
+
+  const fetchTimetableData = async (studentSID) => {
+    try {
+      console.log('Debug: fetchTimetableData called for student:', studentSID);
+      setTimetableLoading(true);
+      
+      // Step 1: Get student's semester payments with all details including date
+      const { data: semesterPayments, error: paymentError } = await supabase
+        .from('semester_payment')
+        .select('paymentid, year, semester, status, date, degreeid, facultyid')
+        .eq('sid', studentSID)
+        .order('date', { ascending: false }); // Order by most recent date first
+
+      console.log('Debug: Semester payments query result:', { semesterPayments, paymentError });
+
+      if (paymentError) {
+        console.error('Error fetching semester payments:', paymentError);
+        setClassSchedule([]);
+        setExamSchedule([]);
+        return;
+      }
+
+      if (!semesterPayments || semesterPayments.length === 0) {
+        console.log('Debug: No semester payments found for student');
+        setClassSchedule([]);
+        setExamSchedule([]);
+        return;
+      }
+
+      // Step 2: Find the most recent payment (most recent enrollment)
+      const mostRecentPayment = semesterPayments[0]; // First item is most recent due to ordering
+      console.log('Debug: Most recent payment (enrollment):', mostRecentPayment);
+
+      // For class timetable, use only the most recent enrollment (current semester)
+      const currentSemesterInfo = {
+        year: mostRecentPayment.year,
+        semester: mostRecentPayment.semester,
+        degreeid: mostRecentPayment.degreeid,
+        enrollmentDate: mostRecentPayment.date
+      };
+
+      console.log('Debug: Current semester info for class schedule:', currentSemesterInfo);
+
+      // Get all unique year/semester combinations for exam purposes
+      const uniqueYearSemesters = [];
+      const seen = new Set();
+      
+      semesterPayments.forEach(payment => {
+        const key = `${payment.year}-${payment.semester}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueYearSemesters.push({
+            year: payment.year,
+            semester: payment.semester,
+            degreeid: payment.degreeid
+          });
+        }
+      });
+
+      console.log('Debug: All student registered year/semesters (for exams):', uniqueYearSemesters);
+
+      // Step 3: Get student's degree information to find relevant courses
+      console.log('Debug: Getting student degree information for SID:', studentSID);
+      const { data: studentInfo, error: studentError } = await supabase
+        .from('student')
+        .select('sid, degreeid, facultyid, f_name, l_name')
+        .eq('sid', studentSID)
+        .single();
+
+      console.log('Debug: Student info query result:', { studentInfo, studentError });
+
+      // Also log the semester payments in more detail
+      console.log('Debug: Detailed semester payments analysis:');
+      semesterPayments.forEach((payment, index) => {
+        console.log(`Payment ${index + 1}:`, {
+          paymentid: payment.paymentid,
+          year: payment.year,
+          semester: payment.semester,
+          degreeid: payment.degreeid,
+          status: payment.status,
+          date: payment.date
+        });
+      });
+
+      if (studentError || !studentInfo) {
+        console.error('Error fetching student info:', studentError);
+        setClassSchedule([]);
+        setExamSchedule([]);
+        return;
+      }
+
+      // Step 4A: Get courses for current semester (for class schedule)
+      console.log('Debug: Looking for courses for current semester:', {
+        studentDegreeid: studentInfo.degreeid,
+        currentYear: currentSemesterInfo.year,
+        currentSemester: currentSemesterInfo.semester
+      });
+
+      const { data: currentSemesterCourses, error: currentCourseError } = await supabase
+        .from('course')
+        .select('cid, cname, year, semester, credits, degreeid, type')
+        .eq('degreeid', studentInfo.degreeid)
+        .eq('year', currentSemesterInfo.year)
+        .eq('semester', currentSemesterInfo.semester);
+
+      console.log('Debug: Current semester courses:', { currentSemesterCourses, currentCourseError });
+
+      // Step 4B: Get courses for all registered year/semester combinations (for exams)
+      console.log('Debug: Looking for courses for all semesters (exams):', {
+        studentDegreeid: studentInfo.degreeid,
+        uniqueYearSemesters: uniqueYearSemesters
+      });
+
+      let examCourseQuery = supabase
+        .from('course')
+        .select('cid, cname, year, semester, credits, degreeid, type')
+        .eq('degreeid', studentInfo.degreeid);
+
+      // Add year/semester filtering for exam courses
+      const orConditions = uniqueYearSemesters.map(ys => 
+        `and(year.eq.${ys.year},semester.eq.${ys.semester})`
+      ).join(',');
+
+      console.log('Debug: OR conditions for exam course query:', orConditions);
+
+      const { data: examSemesterCourses, error: examCourseError } = await examCourseQuery
+        .or(orConditions);
+
+      console.log('Debug: Exam semester courses for all year/semesters:', { examSemesterCourses, examCourseError });
+
+      // Let's also check what courses exist for this degree without year/semester filter
+      const { data: allDegreeCourses, error: allDegreeCoursesError } = await supabase
+        .from('course')
+        .select('cid, cname, year, semester, credits, degreeid, type')
+        .eq('degreeid', studentInfo.degreeid);
+
+      console.log('Debug: All courses for this degree (no year/semester filter):', { allDegreeCourses, allDegreeCoursesError });
+
+      if (currentCourseError || examCourseError) {
+        console.error('Error fetching courses:', { currentCourseError, examCourseError });
+        setClassSchedule([]);
+        setExamSchedule([]);
+        return;
+      }
+
+      // Step 5: Also get courses from other_payment table (for Repeat/Prorata exams)
+      const { data: otherPaymentRecords, error: otherPaymentError } = await supabase
+        .from('other_payment')
+        .select('cid, paymenttype, year, semester, status, date, amount')
+        .eq('sid', studentSID)
+        .in('paymenttype', ['Repeat Module', 'Prorata']);
+
+      console.log('Debug: Other payment records query result:', { otherPaymentRecords, otherPaymentError });
+
+      // Get course details for other payment courses
+      const otherPaymentCourseIds = otherPaymentRecords?.map(payment => payment.cid) || [];
+      let otherPaymentCourses = [];
+      
+      if (otherPaymentCourseIds.length > 0) {
+        const { data: otherCourses, error: otherCoursesError } = await supabase
+          .from('course')
+          .select('cid, cname, year, semester, credits, degreeid, type')
+          .in('cid', otherPaymentCourseIds);
+        
+        if (!otherCoursesError) {
+          otherPaymentCourses = otherCourses || [];
+        }
+      }
+
+      console.log('Debug: Other payment courses details:', { otherPaymentCourses });
+
+      // For class schedule: use current semester courses only
+      const currentSemesterCourseIds = (currentSemesterCourses || []).map(course => course.cid);
+      console.log('Debug: Current semester course IDs (for class schedule):', currentSemesterCourseIds);
+
+      // For exam schedule: combine all semester courses and other payment courses
+      const allExamCourses = [
+        ...(examSemesterCourses || []),
+        ...otherPaymentCourses
+      ];
+      
+      // Remove duplicates based on cid for exam courses
+      const uniqueExamCourses = allExamCourses.filter((course, index, self) => 
+        index === self.findIndex(c => c.cid === course.cid)
+      );
+
+      const examRelevantCourses = uniqueExamCourses;
+      const examRelevantCourseIds = uniqueExamCourses.map(course => course.cid);
+      
+      console.log('Debug: Exam relevant courses (combined and unique):', { examRelevantCourses, examRelevantCourseIds });
+
+      // Step 6: Fetch class schedule from classtimetable table for next 2 weeks
+      console.log('Debug: About to fetch class schedule...');
+      console.log('Debug: Current semester course IDs length:', currentSemesterCourseIds.length);
+      console.log('Debug: Current semester course IDs:', currentSemesterCourseIds);
+
+      // First, let's check if classtimetable table has any data at all
+      const { data: allClassData, error: allClassError } = await supabase
+        .from('classtimetable')
+        .select('*')
+        .limit(5);
+
+      console.log('Debug: Sample classtimetable data (first 5 records):', { allClassData, allClassError });
+
+      if (currentSemesterCourseIds.length > 0) {
+        const today = new Date();
+        const twoWeeksLater = new Date();
+        twoWeeksLater.setDate(today.getDate() + 14); // Next 2 weeks
+        
+        console.log('Debug: Fetching class schedule for date range:', {
+          from: today.toISOString().split('T')[0],
+          to: twoWeeksLater.toISOString().split('T')[0],
+          currentSemesterCourseIds
+        });
+
+        // Try a simpler query first without date filtering
+        const { data: allCoursesClassData, error: allCoursesClassError } = await supabase
+          .from('classtimetable')
+          .select(`
+            classtimetableid,
+            date,
+            starttime,
+            endtime,
+            vid,
+            lid,
+            cid
+          `)
+          .in('cid', currentSemesterCourseIds);
+
+        console.log('Debug: All classes for relevant courses (no date filter):', { allCoursesClassData, allCoursesClassError });
+
+        // Now try with date filtering
+        const { data: classData, error: classError } = await supabase
+          .from('classtimetable')
+          .select(`
+            classtimetableid,
+            date,
+            starttime,
+            endtime,
+            vid,
+            lid,
+            cid
+          `)
+          .in('cid', currentSemesterCourseIds)
+          .gte('date', today.toISOString().split('T')[0])
+          .lte('date', twoWeeksLater.toISOString().split('T')[0])
+          .order('date')
+          .order('starttime');
+
+        console.log('Debug: Class timetable query result (with date filter):', { classData, classError });
+
+        if (classError) {
+          console.error('Error fetching class timetable:', classError);
+          setClassSchedule([]);
+        } else {
+          // Step 7: Fetch additional details for each class (location, lecturer, course)
+          const classesWithDetails = await Promise.all(
+            (classData || []).map(async (classItem) => {
+              // Get course details from current semester courses
+              const courseDetails = (currentSemesterCourses || []).find(course => course.cid === classItem.cid);
+              
+              // Get location details (corrected column name: 'location' not 'venue')
+              let locationDetails = null;
+              if (classItem.vid) {
+                const { data: locationData, error: locationError } = await supabase
+                  .from('location')
+                  .select('vid, location')
+                  .eq('vid', classItem.vid)
+                  .single();
+                
+                console.log('Debug: Location query for vid', classItem.vid, ':', { locationData, locationError });
+                
+                if (!locationError && locationData) {
+                  locationDetails = locationData;
+                }
+              }
+
+              // Get lecturer details (corrected column names: 'f_name', 'l_name')
+              let lecturerDetails = null;
+              if (classItem.lid) {
+                const { data: lecturerData, error: lecturerError } = await supabase
+                  .from('lecturer')
+                  .select('lid, f_name, l_name')
+                  .eq('lid', classItem.lid)
+                  .single();
+                
+                console.log('Debug: Lecturer query for lid', classItem.lid, ':', { lecturerData, lecturerError });
+                
+                if (!lecturerError && lecturerData) {
+                  lecturerDetails = {
+                    lid: lecturerData.lid,
+                    name: `${lecturerData.f_name} ${lecturerData.l_name}`.trim()
+                  };
+                }
+              }
+              
+              return {
+                ...classItem,
+                course: courseDetails || { cid: classItem.cid, cname: 'Unknown Course', credits: null, year: null, semester: null },
+                location: locationDetails || { vid: classItem.vid, location: 'Unknown Location' },
+                lecturer: lecturerDetails || { lid: classItem.lid, name: 'Unknown Lecturer' }
+              };
+            })
+          );
+          
+          console.log('Debug: Class schedule with details:', classesWithDetails);
+          setClassSchedule(classesWithDetails);
+        }
+
+        // Step 8: Fetch exam schedule for exam relevant courses (without join due to FK issue)
+        const { data: examData, error: examError } = await supabase
+          .from('exam')
+          .select(`
+            examid,
+            examcategory,
+            date,
+            starttime,
+            endtime,
+            cid,
+            Status,
+            Vid
+          `)
+          .in('cid', examRelevantCourseIds)
+          .order('date')
+          .order('starttime');
+
+        console.log('Debug: Exam schedule query result:', { examData, examError });
+
+        if (examError) {
+          console.error('Error fetching exam schedule:', examError);
+          setExamSchedule([]);
+        } else {
+          console.log('Debug: Found exam data:', examData);
+          
+          // Step 9: Manually fetch course details and location details for each exam
+          const examsWithDetails = await Promise.all(
+            (examData || []).map(async (exam) => {
+              // Get course details for this exam's cid from exam relevant courses
+              const courseDetails = examRelevantCourses.find(course => course.cid === exam.cid);
+              
+              // Get location details for this exam's Vid (corrected column name)
+              let locationDetails = null;
+              if (exam.Vid) {
+                const { data: locationData, error: locationError } = await supabase
+                  .from('location')
+                  .select('vid, location')
+                  .eq('vid', exam.Vid)
+                  .single();
+                
+                if (!locationError && locationData) {
+                  locationDetails = locationData;
+                }
+              }
+              
+              return {
+                ...exam,
+                course: courseDetails || { cid: exam.cid, cname: 'Unknown Course', year: null, semester: null },
+                location: locationDetails || { vid: exam.Vid, location: 'Unknown Location' }
+              };
+            })
+          );
+
+          console.log('Debug: Exams with course and location details:', examsWithDetails);
+          
+          // Step 7: Filter and process exams - only show upcoming exams based on payment dates
+          const eligibleExams = [];
+          
+          for (const exam of examsWithDetails) {
+            console.log('Debug: Processing exam:', exam);
+            
+            let shouldShowExam = false;
+            let isEligible = false;
+            let eligibilityMessage = 'Not eligible';
+            let paymentDetails = {};
+
+            if (exam.Status === 'Proper') {
+              // For Proper exams: Check semester_payment table and time condition
+              const relevantPayment = semesterPayments.find(payment => 
+                payment.year === exam.course?.year && 
+                payment.semester === exam.course?.semester &&
+                payment.degreeid === exam.course?.degreeid
+              );
+
+              // Check if exam date is in upcoming month compared to payment date
+              let isUpcomingExam = false;
+              if (relevantPayment) {
+                const examDate = new Date(exam.date);
+                const paymentDate = new Date(relevantPayment.date);
+                
+                // Check if exam is in the same month or upcoming months after payment
+                isUpcomingExam = examDate >= paymentDate;
+              }
+
+              console.log('Debug: Proper exam payment and time check:', { 
+                examId: exam.examid, 
+                examDate: exam.date,
+                courseYear: exam.course?.year, 
+                courseSemester: exam.course?.semester,
+                courseDegreeId: exam.course?.degreeid,
+                relevantPayment,
+                isUpcomingExam,
+                mostRecentPaymentStatus: mostRecentPayment.status,
+                mostRecentPaymentDate: mostRecentPayment.date
+              });
+
+              // Only show exam if there's a payment record AND it's upcoming
+              if (relevantPayment && isUpcomingExam) {
+                shouldShowExam = true;
+                
+                if (relevantPayment.status !== 'Completed') {
+                  eligibilityMessage = 'Not eligible because semester payment is not completed';
+                } else {
+                  isEligible = true;
+                  eligibilityMessage = 'Eligible';
+                }
+
+                paymentDetails = {
+                  paymentType: 'Semester Payment',
+                  mostRecentPaymentStatus: relevantPayment.status,
+                  mostRecentPaymentDate: relevantPayment.date,
+                  relevantPaymentDate: relevantPayment.date
+                };
+              }
+
+            } else if (exam.Status === 'Repeat') {
+              // For Repeat exams: Check other_payment records for this specific course and time condition
+              console.log('Debug: Checking repeat/prorata payment for course:', exam.cid);
+              
+              // Find the most recent other payment for this course
+              const relevantOtherPayments = otherPaymentRecords?.filter(payment => 
+                payment.cid === exam.cid &&
+                (payment.paymenttype === 'Repeat Module' || payment.paymenttype === 'Prorata')
+              ) || [];
+
+              // Sort by date to get the most recent
+              const sortedPayments = relevantOtherPayments.sort((a, b) => 
+                new Date(b.date) - new Date(a.date)
+              );
+
+              const repeatPayment = sortedPayments.length > 0 ? sortedPayments[0] : null;
+
+              let isUpcomingExam = false;
+              if (repeatPayment) {
+                // Check if exam date is in upcoming month compared to repeat/prorata payment date
+                const examDate = new Date(exam.date);
+                const paymentDate = new Date(repeatPayment.date);
+                
+                // Check if exam is in the same month or upcoming months after payment
+                isUpcomingExam = examDate >= paymentDate;
+              }
+
+              console.log('Debug: Repeat exam time check:', {
+                examId: exam.examid,
+                examDate: exam.date,
+                relevantOtherPayments,
+                repeatPayment,
+                isUpcomingExam
+              });
+
+              // Only show exam if there's a payment record AND it's upcoming
+              if (repeatPayment && isUpcomingExam) {
+                shouldShowExam = true;
+                
+                if (repeatPayment.status !== 'Completed') {
+                  eligibilityMessage = `Not eligible because ${repeatPayment.paymenttype.toLowerCase()} payment is not completed`;
+                } else {
+                  isEligible = true;
+                  eligibilityMessage = 'Eligible';
+                }
+
+                paymentDetails = {
+                  paymentType: `${repeatPayment.paymenttype} Payment`,
+                  mostRecentPaymentStatus: repeatPayment.status,
+                  mostRecentPaymentDate: repeatPayment.date,
+                  amount: repeatPayment.amount
+                };
+              }
+            }
+            
+            // Only add exam to the list if it should be shown (has payment record and is upcoming)
+            if (shouldShowExam) {
+              eligibleExams.push({
+                ...exam,
+                isEligible: isEligible,
+                eligibilityMessage: eligibilityMessage,
+                ...paymentDetails
+              });
+            }
+          }
+
+          const examsWithEligibility = eligibleExams;
+
+          console.log('Debug: Final exam schedule with eligibility:', examsWithEligibility);
+          setExamSchedule(examsWithEligibility);
+        }
+      } else {
+        console.log('Debug: No relevant courses found');
+        setClassSchedule([]);
+        setExamSchedule([]);
+      }
+
+    } catch (error) {
+      console.error('Error fetching timetable data:', error);
+    } finally {
+      setTimetableLoading(false);
     }
   };
 
@@ -1022,82 +1649,7 @@ const StudentDashboard = () => {
     return `Rs. ${parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
-  const handleCourseSelection = (courseId) => {
-    setSelectedCourses(prev => {
-      if (prev.includes(courseId)) {
-        return prev.filter(id => id !== courseId);
-      } else {
-        return [...prev, courseId];
-      }
-    });
-  };
 
-  const handleEnrollment = async () => {
-    if (selectedCourses.length === 0) {
-      alert('Please select at least one course to enroll.');
-      return;
-    }
-
-    if (!window.confirm(`Are you sure you want to enroll in ${selectedCourses.length} course(s)?`)) {
-      return;
-    }
-
-    setEnrollmentLoading(true);
-    try {
-      // Prepare enrollment data
-      const enrollmentData = selectedCourses.map(courseId => ({
-        sid: studentData.sid,
-        cid: courseId,
-        enrollment_date: new Date().toISOString().split('T')[0],
-        status: 'Active'
-      }));
-
-      // Insert enrollments
-      const { error } = await supabase
-        .from('enrollment')
-        .insert(enrollmentData);
-
-      if (error) {
-        console.error('Enrollment error:', error);
-        alert('Failed to enroll in courses: ' + error.message);
-      } else {
-        alert('Successfully enrolled in selected courses!');
-        setSelectedCourses([]);
-        // Refresh enrollment data
-        await fetchEnrollmentData(studentData.sid);
-      }
-    } catch (error) {
-      console.error('Error during enrollment:', error);
-      alert('An unexpected error occurred during enrollment.');
-    } finally {
-      setEnrollmentLoading(false);
-    }
-  };
-
-  const handleDropCourse = async (enrollmentId, courseName) => {
-    if (!window.confirm(`Are you sure you want to drop "${courseName}"?`)) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('enrollment')
-        .update({ status: 'Dropped' })
-        .eq('enrollment_id', enrollmentId);
-
-      if (error) {
-        console.error('Drop course error:', error);
-        alert('Failed to drop course: ' + error.message);
-      } else {
-        alert('Course dropped successfully!');
-        // Refresh enrollment data
-        await fetchEnrollmentData(studentData.sid);
-      }
-    } catch (error) {
-      console.error('Error dropping course:', error);
-      alert('An unexpected error occurred while dropping the course.');
-    }
-  };
 
 
 
@@ -1617,7 +2169,17 @@ const StudentDashboard = () => {
                 onClick={() => setActiveTab('enrollment')}
                 style={{ padding: '10px 20px', margin: '0 5px', border: '1px solid #ccc', backgroundColor: activeTab === 'enrollment' ? '#007bff' : 'white', color: activeTab === 'enrollment' ? 'white' : 'black' }}
               >
-                Semester Enrollment
+                Enrolled Modules
+              </button>
+              <button 
+                className={activeTab === 'timetable' ? 'active-tab' : 'tab-button'}
+                onClick={() => {
+                  setActiveTab('timetable');
+                  fetchTimetableData(studentData.sid);
+                }}
+                style={{ padding: '10px 20px', margin: '0 5px', border: '1px solid #ccc', backgroundColor: activeTab === 'timetable' ? '#007bff' : 'white', color: activeTab === 'timetable' ? 'white' : 'black' }}
+              >
+                Timetable
               </button>
             </div>
 
@@ -2086,18 +2648,21 @@ const StudentDashboard = () => {
                                 <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
                                   <button
                                     onClick={() => handleEditEnrollment(enrollment)}
+                                    disabled={enrollment.status === 'Completed'}
                                     style={{
                                       padding: '6px 12px',
-                                      backgroundColor: '#28a745',
+                                      backgroundColor: enrollment.status === 'Completed' ? '#6c757d' : '#28a745',
                                       color: 'white',
                                       border: 'none',
                                       borderRadius: '4px',
-                                      cursor: 'pointer',
+                                      cursor: enrollment.status === 'Completed' ? 'not-allowed' : 'pointer',
                                       fontSize: '12px',
-                                      fontWeight: 'bold'
+                                      fontWeight: 'bold',
+                                      opacity: enrollment.status === 'Completed' ? 0.6 : 1
                                     }}
+                                    title={enrollment.status === 'Completed' ? 'Cannot update completed payments' : 'Update enrollment'}
                                   >
-                                    ✏️ Update
+                                    {enrollment.status === 'Completed' ? '🔒 Completed' : '✏️ Update'}
                                   </button>
                                       </td>
                                     </tr>
@@ -2568,18 +3133,21 @@ const StudentDashboard = () => {
                                   <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
                                     <button
                                       onClick={() => handleEditOtherPayment(payment)}
+                                      disabled={payment.status === 'Completed'}
                                       style={{
                                         padding: '6px 12px',
-                                        backgroundColor: '#ffc107',
+                                        backgroundColor: payment.status === 'Completed' ? '#6c757d' : '#ffc107',
                                         color: 'white',
                                         border: 'none',
                                         borderRadius: '4px',
-                                        cursor: 'pointer',
+                                        cursor: payment.status === 'Completed' ? 'not-allowed' : 'pointer',
                                         fontSize: '12px',
-                                        fontWeight: 'bold'
+                                        fontWeight: 'bold',
+                                        opacity: payment.status === 'Completed' ? 0.6 : 1
                                       }}
+                                      title={payment.status === 'Completed' ? 'Cannot update completed payments' : 'Update enrollment'}
                                     >
-                                      ✏️ Update
+                                      {payment.status === 'Completed' ? '🔒 Completed' : '✏️ Update'}
                                     </button>
                                   </td>
                                      </tr>
@@ -3016,182 +3584,395 @@ const StudentDashboard = () => {
               </div>
             )}
 
-            {/* Semester Enrollment Tab */}
+            {/* Enrolled Modules Tab */}
             {activeTab === 'enrollment' && (
-              <div className="semester-enrollment">
-                <h3>📚 Semester Enrollment</h3>
+              <div className="enrolled-modules">
+                <h3>📚 Enrolled Modules</h3>
                 
-                {/* Current Enrollments */}
+                {/* Semester Modules */}
                 <div style={{ marginBottom: '40px' }}>
-                  <h4 style={{ color: '#007bff', marginBottom: '20px' }}>Current Enrollments</h4>
-                  {currentEnrollments.length > 0 ? (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        backgroundColor: 'white',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                      }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#007bff', color: 'white' }}>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course ID</th>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course Name</th>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Credits</th>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Lecturer</th>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Enrollment Date</th>
-                            <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {currentEnrollments.map((enrollment, index) => (
-                            <tr key={enrollment.enrollment_id} style={{
-                              backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
+                  <h4 style={{ color: '#007bff', marginBottom: '20px', borderBottom: '2px solid #007bff', paddingBottom: '5px' }}>
+                    📅 Semester Modules
+                  </h4>
+                  {enrolledModules.semester.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '20px' }}>
+                      {enrolledModules.semester.map((semesterModule, index) => (
+                        <div key={semesterModule.paymentid} style={{
+                          backgroundColor: '#f8f9fa',
+                          border: '1px solid #dee2e6',
+                          borderRadius: '8px',
+                          padding: '20px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h5 style={{ color: '#007bff', margin: 0 }}>
+                              Year {semesterModule.year} - Semester {semesterModule.semester}
+                            </h5>
+                            <span style={{
+                              padding: '4px 12px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
                             }}>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
-                                {enrollment.cid}
-                              </td>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                {enrollment.course?.cname || 'Course name not available'}
-                              </td>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                                {enrollment.course?.credits || 'N/A'}
-                              </td>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                {enrollment.course?.lecturer_name || 'N/A'}
-                              </td>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                {new Date(enrollment.enrollment_date).toLocaleDateString()}
-                              </td>
-                              <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                                <button
-                                  onClick={() => handleDropCourse(enrollment.enrollment_id, enrollment.course?.cname)}
-                                  style={{
-                                    padding: '6px 12px',
-                                    backgroundColor: '#dc3545',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '12px'
-                                  }}
-                                >
-                                  Drop
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-          </div>
+                              {semesterModule.status}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+                            <div><strong>Degree:</strong> {semesterModule.degree?.dname || 'N/A'}</div>
+                            <div><strong>Enrollment Date:</strong> {new Date(semesterModule.date).toLocaleDateString()}</div>
+                            <div><strong>Payment ID:</strong> {semesterModule.paymentid}</div>
+                          </div>
+                          
+                          {/* Courses List */}
+                          <div>
+                            <h6 style={{ color: '#495057', marginBottom: '10px', borderBottom: '1px solid #dee2e6', paddingBottom: '5px' }}>
+                              📚 Courses ({semesterModule.courses?.length || 0})
+                            </h6>
+                            {semesterModule.courses && semesterModule.courses.length > 0 ? (
+                              <div style={{ display: 'grid', gap: '10px' }}>
+                                {semesterModule.courses.map((course, courseIndex) => (
+                                  <div key={course.cid} style={{
+                                    backgroundColor: 'white',
+                                    border: '1px solid #e9ecef',
+                                    borderRadius: '6px',
+                                    padding: '12px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                  }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontWeight: 'bold', color: '#007bff', fontSize: '14px' }}>
+                                        {course.cid} - {course.cname}
+                                      </div>
+                                      <div style={{ fontSize: '12px', color: '#6c757d', marginTop: '2px' }}>
+                                        {course.credits} Credits • {course.type}
+                                      </div>
+                                    </div>
+                                    <div style={{
+                                      padding: '3px 8px',
+                                      backgroundColor: course.type === 'Core' ? '#28a745' : '#ffc107',
+                                      color: course.type === 'Core' ? 'white' : '#212529',
+                                      borderRadius: '12px',
+                                      fontSize: '10px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      {course.type}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p style={{ color: '#6c757d', fontSize: '12px', fontStyle: 'italic', margin: 0 }}>
+                                No courses found for this semester
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <p style={{ color: '#666', fontStyle: 'italic' }}>No current enrollments found.</p>
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>No completed semester enrollments found.</p>
                   )}
                 </div>
 
-                {/* Available Courses for Enrollment */}
-                <div>
-                  <h4 style={{ color: '#28a745', marginBottom: '20px' }}>Available Courses for Enrollment</h4>
-                  {availableCourses.length > 0 ? (
-                    <>
-                      <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-                        <table style={{
-                          width: '100%',
-                          borderCollapse: 'collapse',
-                          backgroundColor: 'white',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                        }}>
-                          <thead>
-                            <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Select</th>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course ID</th>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Course Name</th>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Credits</th>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Lecturer</th>
-                              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Description</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {availableCourses.map((course, index) => (
-                              <tr key={course.cid} style={{
-                                backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white'
-                              }}>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedCourses.includes(course.cid)}
-                                    onChange={() => handleCourseSelection(course.cid)}
-                                    style={{ transform: 'scale(1.2)' }}
-                                  />
-                                </td>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
-                                  {course.cid}
-                                </td>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                  {course.cname}
-                                </td>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                                  {course.credits || 'N/A'}
-                                </td>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                  {course.lecturer_name || 'N/A'}
-                                </td>
-                                <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                                  {course.description || 'No description available'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {selectedCourses.length > 0 && (
-                        <div style={{ 
-                          padding: '20px', 
-                          backgroundColor: '#e8f5e8', 
+                {/* Prorata Modules */}
+                <div style={{ marginBottom: '40px' }}>
+                  <h4 style={{ color: '#17a2b8', marginBottom: '20px', borderBottom: '2px solid #17a2b8', paddingBottom: '5px' }}>
+                    📋 Prorata Modules
+                  </h4>
+                  {enrolledModules.prorata.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '15px' }}>
+                      {enrolledModules.prorata.map((prorataModule, index) => (
+                        <div key={prorataModule.paymentid} style={{
+                          backgroundColor: '#e7f6fd',
+                          border: '1px solid #bee5eb',
                           borderRadius: '8px',
-                          border: '1px solid #28a745'
+                          padding: '15px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                         }}>
-                          <div style={{ marginBottom: '15px' }}>
-                            <strong style={{ color: '#155724' }}>
-                              Selected Courses: {selectedCourses.length}
-                            </strong>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <h6 style={{ color: '#17a2b8', margin: 0 }}>
+                              {prorataModule.course?.cid} - {prorataModule.course?.cname}
+                            </h6>
+                            <span style={{
+                              padding: '3px 8px',
+                              backgroundColor: '#17a2b8',
+                              color: 'white',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 'bold'
+                            }}>
+                              Prorata
+                            </span>
                           </div>
-                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button
-                              onClick={() => setSelectedCourses([])}
-                              style={{
-                                padding: '10px 20px',
-                                backgroundColor: '#6c757d',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '5px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Clear Selection
-                            </button>
-                            <button
-                              onClick={handleEnrollment}
-                              disabled={enrollmentLoading}
-                              style={{
-                                padding: '10px 20px',
-                                backgroundColor: enrollmentLoading ? '#cccccc' : '#28a745',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '5px',
-                                cursor: enrollmentLoading ? 'not-allowed' : 'pointer',
-                                opacity: enrollmentLoading ? 0.7 : 1
-                              }}
-                            >
-                              {enrollmentLoading ? 'Enrolling...' : `Enroll in ${selectedCourses.length} Course(s)`}
-                            </button>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', fontSize: '14px' }}>
+                            <div><strong>Credits:</strong> {prorataModule.course?.credits || 'N/A'}</div>
+                            <div><strong>Type:</strong> {prorataModule.course?.type || 'N/A'}</div>
+                            <div><strong>Year:</strong> {prorataModule.year}</div>
+                            <div><strong>Semester:</strong> {prorataModule.semester}</div>
+                            <div><strong>Amount:</strong> LKR {prorataModule.amount || 'N/A'}</div>
+                            <div><strong>Date:</strong> {new Date(prorataModule.date).toLocaleDateString()}</div>
                           </div>
                         </div>
-                      )}
-                    </>
+                      ))}
+                    </div>
                   ) : (
-                    <p style={{ color: '#666', fontStyle: 'italic' }}>No available courses found for your faculty and degree.</p>
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>No completed prorata modules found.</p>
                   )}
+                </div>
+
+                {/* Repeat Modules */}
+                <div style={{ marginBottom: '40px' }}>
+                  <h4 style={{ color: '#dc3545', marginBottom: '20px', borderBottom: '2px solid #dc3545', paddingBottom: '5px' }}>
+                    🔄 Repeat Modules
+                  </h4>
+                  {enrolledModules.repeat.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '15px' }}>
+                      {enrolledModules.repeat.map((repeatModule, index) => (
+                        <div key={repeatModule.paymentid} style={{
+                          backgroundColor: '#fdf2f2',
+                          border: '1px solid #f5c6cb',
+                          borderRadius: '8px',
+                          padding: '15px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <h6 style={{ color: '#dc3545', margin: 0 }}>
+                              {repeatModule.course?.cid} - {repeatModule.course?.cname}
+                            </h6>
+                            <span style={{
+                              padding: '3px 8px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 'bold'
+                            }}>
+                              Repeat
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', fontSize: '14px' }}>
+                            <div><strong>Credits:</strong> {repeatModule.course?.credits || 'N/A'}</div>
+                            <div><strong>Type:</strong> {repeatModule.course?.type || 'N/A'}</div>
+                            <div><strong>Year:</strong> {repeatModule.year}</div>
+                            <div><strong>Semester:</strong> {repeatModule.semester}</div>
+                            <div><strong>Amount:</strong> LKR {repeatModule.amount || 'N/A'}</div>
+                            <div><strong>Date:</strong> {new Date(repeatModule.date).toLocaleDateString()}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>No completed repeat modules found.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Timetable Tab */}
+            {activeTab === 'timetable' && (
+              <div className="timetable-content">
+                <h3>📅 Student Timetable</h3>
+                
+                {timetableLoading ? (
+                  <div style={{ textAlign: 'center', padding: '50px' }}>
+                    <p>Loading timetable data...</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                    
+                    {/* Class Schedule */}
+                    <div style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px' }}>
+                      <h4 style={{ color: '#007bff', marginBottom: '20px', borderBottom: '2px solid #007bff', paddingBottom: '5px' }}>
+                        📚 Class Schedule
+                      </h4>
+                      
+                      {classSchedule.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                          {classSchedule.map((classItem, index) => (
+                            <div key={classItem.classtimetableid} style={{
+                              backgroundColor: 'white',
+                              border: '1px solid #dee2e6',
+                              borderRadius: '8px',
+                              padding: '15px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                <div>
+                                  <h6 style={{ color: '#007bff', margin: '0 0 5px 0', fontSize: '16px', fontWeight: 'bold' }}>
+                                    {classItem.course?.cname || 'Class Session'}
+                                  </h6>
+                                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#495057' }}>
+                                    <strong>{classItem.course?.cid}</strong> - Year {classItem.course?.year} • Semester {classItem.course?.semester}
+                                  </p>
+                                </div>
+                                <span style={{
+                                  padding: '4px 8px',
+                                  backgroundColor: '#e3f2fd',
+                                  color: '#1976d2',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {classItem.course?.credits || 'N/A'} Credits
+                                </span>
+                              </div>
+                              
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '13px', color: '#6c757d' }}>
+                                <div><strong>📅 Date:</strong> {new Date(classItem.date).toLocaleDateString()}</div>
+                                <div><strong>🕐 Time:</strong> {classItem.starttime} - {classItem.endtime}</div>
+                                <div><strong>👨‍🏫 Lecturer:</strong> {classItem.lecturer?.name || 'TBD'}</div>
+                                <div><strong>📍 Location:</strong> {classItem.location?.location || 'TBD'}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+                          <p style={{ fontSize: '16px', marginBottom: '10px' }}>📅 No upcoming classes found</p>
+                          <p style={{ fontSize: '14px', fontStyle: 'italic' }}>
+                            Your class schedule for the next 2 weeks will appear here.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Exam Schedule */}
+                    <div style={{ backgroundColor: '#fff3cd', padding: '20px', borderRadius: '8px' }}>
+                      <h4 style={{ color: '#856404', marginBottom: '20px', borderBottom: '2px solid #856404', paddingBottom: '5px' }}>
+                        📝 Exam Schedule
+                      </h4>
+                      
+                      {examSchedule.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                          {examSchedule.map((exam, index) => (
+                            <div key={exam.examid || index} style={{
+                              backgroundColor: 'white',
+                              border: `2px solid ${exam.isEligible ? '#28a745' : '#dc3545'}`,
+                              borderRadius: '8px',
+                              padding: '15px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                              opacity: exam.isEligible ? 1 : 0.8
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                                <div>
+                                  <h6 style={{ color: '#856404', margin: '0 0 5px 0', fontSize: '16px', fontWeight: 'bold' }}>
+                                    {exam.examcategory} Exam - {exam.course?.cname}
+                                  </h6>
+                                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#495057' }}>
+                                    Course: <strong>{exam.cid}</strong> • {exam.course?.credits} Credits
+                                  </p>
+                                  <p style={{ margin: '0', fontSize: '13px', color: '#6c757d' }}>
+                                    Year {exam.course?.year} • Semester {exam.course?.semester}
+                                  </p>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <span style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: exam.isEligible ? '#d4edda' : '#f8d7da',
+                                    color: exam.isEligible ? '#155724' : '#721c24',
+                                    borderRadius: '12px',
+                                    fontSize: '12px',
+                                    fontWeight: 'bold',
+                                    display: 'block',
+                                    marginBottom: '5px'
+                                  }}>
+                                    {exam.isEligible ? '✅ Eligible' : '❌ Not Eligible'}
+                                  </span>
+                                  <span style={{
+                                    padding: '3px 6px',
+                                    backgroundColor: exam.Status === 'Proper' ? '#e3f2fd' : '#fff3e0',
+                                    color: exam.Status === 'Proper' ? '#1976d2' : '#f57c00',
+                                    borderRadius: '8px',
+                                    fontSize: '11px',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {exam.Status}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '13px', color: '#6c757d', marginBottom: '10px' }}>
+                                <div><strong>📅 Date:</strong> {new Date(exam.date).toLocaleDateString()}</div>
+                                <div><strong>🕐 Time:</strong> {exam.starttime} - {exam.endtime}</div>
+                                <div><strong>📋 Category:</strong> {exam.examcategory}</div>
+                                <div><strong>🎯 Status:</strong> {exam.Status}</div>
+                                <div><strong>📍 Location:</strong> {exam.location?.location || 'TBD'}</div>
+                                <div><strong>🏢 Venue ID:</strong> {exam.location?.vid || 'N/A'}</div>
+                              </div>
+
+                              {!exam.isEligible && (
+                                <div style={{
+                                  backgroundColor: '#f8d7da',
+                                  border: '1px solid #f5c6cb',
+                                  borderRadius: '6px',
+                                  padding: '10px',
+                                  fontSize: '13px',
+                                  color: '#721c24'
+                                }}>
+                                  <strong>⚠️ Not eligible because {exam.Status === 'Repeat' ? 'repeat module' : 'semester'} payment is not completed</strong>
+                                </div>
+                              )}
+
+                              {exam.isEligible && (
+                                <div style={{
+                                  backgroundColor: '#d4edda',
+                                  border: '1px solid #c3e6cb',
+                                  borderRadius: '6px',
+                                  padding: '8px',
+                                  fontSize: '12px',
+                                  color: '#155724',
+                                  marginTop: '10px'
+                                }}>
+                                  <strong>✅ Payment completed</strong>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+                          <p style={{ fontSize: '16px', marginBottom: '10px' }}>📝 No exam information found</p>
+                          <p style={{ fontSize: '14px', fontStyle: 'italic' }}>
+                            Your exam schedule and results will appear here.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Timetable Legend */}
+                <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#e9ecef', borderRadius: '8px' }}>
+                  <h5 style={{ marginBottom: '15px', color: '#495057' }}>📋 Legend</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '10px', fontSize: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#007bff', borderRadius: '3px' }}></div>
+                      <span>Class Schedule</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#856404', borderRadius: '3px' }}></div>
+                      <span>Exam Schedule</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#28a745', borderRadius: '3px' }}></div>
+                      <span>✅ Eligible for Exam (Payment Complete)</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#dc3545', borderRadius: '3px' }}></div>
+                      <span>❌ Not Eligible (Payment Incomplete)</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#1976d2', borderRadius: '3px' }}></div>
+                      <span>Proper Exam</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', backgroundColor: '#f57c00', borderRadius: '3px' }}></div>
+                      <span>Repeat Exam</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
