@@ -13,6 +13,7 @@ import StudentRegistration from "./components/student-control/StudentRegistratio
 import StudentRegistrationAndAccountCreation from "./components/student-control/StudentRegistrationAndAccountCreation";
 import StudentAccountCreation from "./components/student-control/StudentAccountCreation";
 import StudentEnrollmentManagement from "./components/student-control/StudentEnrollmentManagement";
+import StudentInquiriesManagement from "./components/student-control/StudentInquiriesManagement";
 import PaymentDetails from "./components/student/PaymentDetails";
 
 import "./components/Dashboard.css";
@@ -94,6 +95,15 @@ function App() {
           element={
             <ProtectedRoute>
               <StudentEnrollmentManagement />
+            </ProtectedRoute>
+          } 
+        />
+
+         <Route 
+          path="/student-inquiries-management" 
+          element={
+            <ProtectedRoute>
+              <StudentInquiriesManagement />
             </ProtectedRoute>
           } 
         />

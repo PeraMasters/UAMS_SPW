@@ -13,6 +13,10 @@ const StudentControlDashboard = () => {
     navigate('/student-enrollment');
   };
 
+  const handleStudentInquiriesClick = () => {
+    navigate('/student-inquiries-management');
+  };
+
   return (
     <div className="dashboard-page">
       {/* Use the DashboardNavBar component */}
@@ -38,6 +42,10 @@ const StudentControlDashboard = () => {
             <div className="action-card">
               <h3>Attendance Tracking</h3>
               <p>Monitor student attendance and participation</p>
+            </div>
+            <div className="action-card" onClick={handleStudentInquiriesClick} style={{ cursor: 'pointer' }}>
+              <h3>Student Inquiries</h3>
+              <p>View and respond to student inquiries and requests</p>
             </div>
           </div>
         </div>
