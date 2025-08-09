@@ -1233,7 +1233,12 @@ const StudentDashboard = () => {
           setClassSchedule(classesWithDetails);
         }
 
-        // Step 8: Fetch exam schedule for exam relevant courses (without join due to FK issue)
+        // Step 8: Fetch exam schedule for exam relevant courses (only upcoming exams)
+        const currentDate = new Date();
+        const currentDateString = currentDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        
+        console.log('Debug: Fetching upcoming exams from date:', currentDateString);
+        
         const { data: examData, error: examError } = await supabase
           .from('exam')
           .select(`
@@ -1247,16 +1252,26 @@ const StudentDashboard = () => {
             Vid
           `)
           .in('cid', examRelevantCourseIds)
+          .gte('date', currentDateString) // Only get exams from today onwards
           .order('date')
           .order('starttime');
 
-        console.log('Debug: Exam schedule query result:', { examData, examError });
+        console.log('Debug: Exam schedule query result (upcoming only):', { examData, examError });
+        console.log('Debug: Number of upcoming exams found:', examData?.length || 0);
 
         if (examError) {
           console.error('Error fetching exam schedule:', examError);
           setExamSchedule([]);
         } else {
-          console.log('Debug: Found exam data:', examData);
+          console.log('Debug: Found upcoming exam data:', examData);
+          
+          // Log each exam date for verification
+          if (examData && examData.length > 0) {
+            console.log('Debug: Upcoming exam dates:');
+            examData.forEach((exam, index) => {
+              console.log(`  ${index + 1}. ${exam.cid} - ${exam.examcategory} on ${exam.date}`);
+            });
+          }
           
           // Step 9: Manually fetch course details and location details for each exam
           const examsWithDetails = await Promise.all(
@@ -1371,23 +1386,34 @@ const StudentDashboard = () => {
 
               let isUpcomingExam = false;
               if (repeatPayment) {
-                // Check if exam date is in upcoming month compared to repeat/prorata payment date
+                // Check if exam date is within 5 months from repeat/prorata payment date
                 const examDate = new Date(exam.date);
                 const paymentDate = new Date(repeatPayment.date);
                 
-                // Check if exam is in the same month or upcoming months after payment
-                isUpcomingExam = examDate >= paymentDate;
+                // Calculate 5 months from payment date
+                const fiveMonthsFromPayment = new Date(paymentDate);
+                fiveMonthsFromPayment.setMonth(fiveMonthsFromPayment.getMonth() + 5);
+                
+                // Check if exam is within the 5-month validity period
+                isUpcomingExam = examDate >= paymentDate && examDate <= fiveMonthsFromPayment;
+                
+                console.log('Debug: Repeat/Prorata exam 5-month validity check:', {
+                  paymentDate: paymentDate.toISOString().split('T')[0],
+                  examDate: examDate.toISOString().split('T')[0],
+                  fiveMonthsFromPayment: fiveMonthsFromPayment.toISOString().split('T')[0],
+                  isWithinValidityPeriod: isUpcomingExam
+                });
               }
 
-              console.log('Debug: Repeat exam time check:', {
+              console.log('Debug: Repeat exam 5-month validity check:', {
                 examId: exam.examid,
                 examDate: exam.date,
                 relevantOtherPayments,
                 repeatPayment,
-                isUpcomingExam
+                isWithin5MonthValidity: isUpcomingExam
               });
 
-              // Only show exam if there's a payment record AND it's upcoming
+              // Only show exam if there's a payment record AND it's within 5-month validity period
               if (repeatPayment && isUpcomingExam) {
                 shouldShowExam = true;
                 
@@ -1395,7 +1421,7 @@ const StudentDashboard = () => {
                   eligibilityMessage = `Not eligible because ${repeatPayment.paymenttype.toLowerCase()} payment is not completed`;
                 } else {
                   isEligible = true;
-                  eligibilityMessage = 'Eligible';
+                  eligibilityMessage = 'Eligible (within 5-month validity period)';
                 }
 
                 paymentDetails = {
@@ -4164,7 +4190,7 @@ const StudentDashboard = () => {
                     {/* Exam Schedule */}
                     <div style={{ backgroundColor: '#fff3cd', padding: '20px', borderRadius: '8px' }}>
                       <h4 style={{ color: '#856404', marginBottom: '20px', borderBottom: '2px solid #856404', paddingBottom: '5px' }}>
-                        📝 Exam Schedule
+                        📝 Upcoming Exam Schedule
                       </h4>
                       
                       {examSchedule.length > 0 ? (
@@ -4256,9 +4282,9 @@ const StudentDashboard = () => {
                         </div>
                       ) : (
                         <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-                          <p style={{ fontSize: '16px', marginBottom: '10px' }}>📝 No exam information found</p>
+                          <p style={{ fontSize: '16px', marginBottom: '10px' }}>📝 No upcoming exams found</p>
                           <p style={{ fontSize: '14px', fontStyle: 'italic' }}>
-                            Your exam schedule and results will appear here.
+                            Your upcoming exam schedule will appear here when available.
                           </p>
                         </div>
                       )}
