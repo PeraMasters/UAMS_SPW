@@ -1,0 +1,175 @@
+/* Container */
+.timetable-container {
+  padding: 20px;
+}
+
+/* Date section */
+.timetable-date {
+  margin-bottom: 32px;
+}
+
+.timetable-date h3 {
+  margin-bottom: 18px;
+  color: #2c3e50;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+/* Block layout for timetable entries */
+.timetable-blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+/* Individual timetable block */
+.timetable-block {
+  /* background will be set inline for random color */
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.10);
+  padding: 20px 24px;
+  min-width: 260px;
+  max-width: 340px;
+  color: #222;
+  font-size: 15px;
+  margin-bottom: 8px;
+  transition: transform 0.12s, box-shadow 0.12s;
+  border: 1px solid #f6d365;
+}
+
+.timetable-block:hover {
+  transform: scale(1.03);
+  box-shadow: 0 6px 18px rgba(44, 62, 80, 0.18);
+}
+
+.timetable-block strong {
+  color: #504f4f;
+  font-weight: 600;
+}
+
+/* Responsive for small screens */
+@media (max-width: 700px) {
+  .timetable-blocks {
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+  }
+  .timetable-block {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    margin-bottom: 0;
+    box-sizing: border-box;
+  }
+}
+
+/* Filters styling */
+.timetable-filters {
+  margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timetable-filters select,
+.timetable-filters input[type="date"] {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #000000;
+  font-size: 15px;
+}
+
+.timetable-filters button {
+  background: #f4b400;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.timetable-filters button:hover {
+  background: #c0392b;
+}
+
+/* Ribbon header */
+.timetable-header-ribbon {
+  position: relative;
+  margin-bottom: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  height: 70px;
+}
+
+.timetable-header-title {
+  background: linear-gradient(90deg, #e74c3c 60%, #f6d365 100%);
+  color: #fff;
+  font-size: 2rem;
+  font-weight: bold;
+  padding: 16px 38px 16px 28px;
+  border-radius: 0 30px 30px 0;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(44,62,80,0.10);
+}
+
+.timetable-header-bg-only {
+
+  background: linear-gradient( #ebba19);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: bold;
+  padding: 22px 0 22px 32px;
+  border-radius: 0 30px 30px 0;
+  margin: 0 0 30px 0;
+  letter-spacing: 2px;
+  box-shadow: 0 2px 8px rgba(44,62,80,0.10);
+
+
+/* lecture - my own time table */
+.cc-lecturer-name {
+  color: #e9e7e4;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  font-size: 1em;
+  text-transform: uppercase;
+}
+
+/* .timetable-header-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 5px;
+} */
+
+/* .timetable-header-actions {
+  display: flex;
+  gap: 10px;
+} */
+.timetable-header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.timetable-header-btn {
+  background: #ebba19;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(44,62,80,0.10);
+}
+
+.timetable-header-btn:hover {
+  background: #c0392b;
+  color: #fff;
+}
+
+}
+
