@@ -68,6 +68,9 @@ const StudentDashboard = () => {
   const [examSchedule, setExamSchedule] = useState([]);
   const [timetableLoading, setTimetableLoading] = useState(false);
 
+  // Exam results state
+  const [examResultsLoading, setExamResultsLoading] = useState(false);
+
   // Other payment (repeat/prorata) enrollment state
   const [showOtherPaymentForm, setShowOtherPaymentForm] = useState(false);
   const [isOtherEditMode, setIsOtherEditMode] = useState(false);
@@ -347,6 +350,186 @@ const StudentDashboard = () => {
     }
   }, [semesterFormData.facultyid, allDegrees]);
 
+  const fetchExamResults = useCallback(async (studentSID) => {
+    // Helper function to calculate grade points (moved inside to avoid dependency issues)
+    const calculateGradePoints = (grade) => {
+      if (!grade) return 0;
+      
+      const gradeStr = grade.toString().toUpperCase().trim();
+      
+      // Standard 4.0 GPA scale
+      const gradeMap = {
+        'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+        'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+        'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+        'D+': 1.3, 'D': 1.0, 'D-': 0.7,
+        'F': 0.0
+      };
+      
+      return gradeMap[gradeStr] || 0;
+    };
+
+    try {
+      console.log('Debug: Fetching exam results for student:', studentSID);
+      setExamResultsLoading(true);
+      
+      // First, let's check if the examresult table exists and has any data
+      const { data: sampleResults, error: sampleError } = await supabase
+        .from('examresult')
+        .select('*')
+        .limit(5);
+      
+      console.log('Debug: Sample examresult data (first 5 records):', { sampleResults, sampleError });
+      
+      // Also check what SIDs exist in examresult table to verify data
+      const { data: uniqueSIDs, error: sidError } = await supabase
+        .from('examresult')
+        .select('sid')
+        .limit(10);
+      
+      console.log('Debug: SIDs found in examresult table:', { uniqueSIDs, sidError });
+      console.log('Debug: Looking for results with SID:', studentSID);
+      
+      // Step 1: Get exam results for the student
+      const { data: examResultsData, error: resultsError } = await supabase
+        .from('examresult')
+        .select('resultid, marks, grade, sid, cid')
+        .eq('sid', studentSID);
+
+      if (resultsError) {
+        console.error('Exam results fetch error:', resultsError);
+        setExamResults([]);
+        return;
+      }
+
+      console.log('Debug: Raw exam results:', examResultsData);
+
+      if (!examResultsData || examResultsData.length === 0) {
+        console.log('Debug: No exam results found for student');
+        setExamResults([]);
+        return;
+      }
+
+      // Step 2: Get course details for each result
+      const courseIds = [...new Set(examResultsData.map(result => result.cid))];
+      console.log('Debug: Course IDs for results:', courseIds);
+
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('course')
+        .select('cid, cname, credits, year, semester, degreeid, type')
+        .in('cid', courseIds);
+
+      if (coursesError) {
+        console.error('Error fetching course details:', coursesError);
+        setExamResults(examResultsData || []);
+        return;
+      }
+
+      console.log('Debug: Course details:', coursesData);
+
+      // Step 3: Combine exam results with course details
+      const resultsWithCourses = examResultsData.map(result => {
+        const courseDetails = coursesData?.find(course => course.cid === result.cid);
+        return {
+          ...result,
+          course: courseDetails || { 
+            cid: result.cid, 
+            cname: 'Unknown Course', 
+            credits: 0, 
+            year: 0, 
+            semester: 0,
+            type: 'Unknown'
+          }
+        };
+      });
+
+      console.log('Debug: Results with course details:', resultsWithCourses);
+
+      // Step 4: Sort by year and semester
+      const sortedResults = resultsWithCourses.sort((a, b) => {
+        if (a.course.year !== b.course.year) {
+          return a.course.year - b.course.year;
+        }
+        return a.course.semester - b.course.semester;
+      });
+
+      console.log('Debug: Sorted results:', sortedResults);
+
+      // Step 5: Group by year and semester, calculate semester GPAs
+      const groupedResults = {};
+      sortedResults.forEach(result => {
+        const key = `Year ${result.course.year} Semester ${result.course.semester}`;
+        if (!groupedResults[key]) {
+          groupedResults[key] = {
+            year: result.course.year,
+            semester: result.course.semester,
+            results: [],
+            totalCredits: 0,
+            totalGradePoints: 0,
+            semesterGPA: 0
+          };
+        }
+        
+        // Add grade points calculation
+        const gradePoints = calculateGradePoints(result.grade);
+        const credits = result.course.credits || 0;
+        
+        groupedResults[key].results.push({
+          ...result,
+          gradePoints,
+          credits
+        });
+        
+        if (gradePoints > 0) { // Only count if valid grade
+          groupedResults[key].totalCredits += credits;
+          groupedResults[key].totalGradePoints += (gradePoints * credits);
+        }
+      });
+
+      // Calculate semester GPAs
+      Object.keys(groupedResults).forEach(key => {
+        const group = groupedResults[key];
+        if (group.totalCredits > 0) {
+          group.semesterGPA = (group.totalGradePoints / group.totalCredits).toFixed(2);
+        } else {
+          group.semesterGPA = '0.00';
+        }
+      });
+
+      // Step 6: Calculate overall GPA
+      let totalCreditsOverall = 0;
+      let totalGradePointsOverall = 0;
+      
+      Object.values(groupedResults).forEach(group => {
+        totalCreditsOverall += group.totalCredits;
+        totalGradePointsOverall += group.totalGradePoints;
+      });
+
+      const overallGPA = totalCreditsOverall > 0 ? 
+        (totalGradePointsOverall / totalCreditsOverall).toFixed(2) : '0.00';
+
+      console.log('Debug: Grouped results with GPA:', groupedResults);
+      console.log('Debug: Overall GPA:', overallGPA);
+
+      // Store both grouped results and overall GPA
+      const resultData = {
+        groupedResults,
+        overallGPA,
+        sortedResults,
+        rawResults: examResultsData // Keep raw data as fallback
+      };
+      
+      console.log('Debug: Final exam results object:', resultData);
+      setExamResults(resultData);
+
+    } catch (error) {
+      console.error('Error fetching exam results:', error);
+      setExamResults([]);
+    } finally {
+      setExamResultsLoading(false);
+    }
+  }, []); // Empty dependency array since function is self-contained
+
   useEffect(() => {
     fetchStudentData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -369,7 +552,14 @@ const StudentDashboard = () => {
     if (activeTab === 'timetable' && studentData?.sid && classSchedule.length === 0 && examSchedule.length === 0) {
       fetchTimetableData(studentData.sid);
     }
-  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, classSchedule.length, examSchedule.length, fetchEnrollmentData, fetchSemesterEnrollments, fetchEnrolledModules]);
+
+    // Fetch exam results when results tab becomes active (always reload for fresh data)
+    if (activeTab === 'results' && studentData?.sid) {
+      console.log('Debug: Results tab activated, fetching fresh exam results...');
+      setExamResults([]); // Clear previous results
+      fetchExamResults(studentData.sid);
+    }
+  }, [activeTab, studentData, semesterPayments.length, otherPayments.length, currentEnrollments.length, availableCourses.length, classSchedule.length, examSchedule.length, fetchEnrollmentData, fetchSemesterEnrollments, fetchEnrolledModules, fetchExamResults]);
 
   const fetchStudentData = async () => {
     try {
@@ -623,27 +813,21 @@ const StudentDashboard = () => {
   };
 
 
-  const fetchExamResults = async (studentSID) => {
-    try {
-      // First try with basic columns (no joins)
-      const { data, error } = await supabase
-        .from('examresult')
-        .select('*')
-        .eq('sid', studentSID);
 
-      if (error) {
-        console.error('Exam results fetch error details:', error);
-        console.error('Error message:', error.message);
-        console.error('Error code:', error.code);
-        console.error('Table/query details:', 'examresult table basic query');
-        return;
-      }
 
-      console.log('Exam results fetched successfully:', data);
-      setExamResults(data || []);
-    } catch (error) {
-      console.error('Error fetching exam results:', error);
-    }
+  // Helper function to get grade color
+  const getGradeColor = (grade) => {
+    if (!grade) return '#6c757d';
+    
+    const gradeStr = grade.toString().toUpperCase().trim();
+    
+    if (gradeStr.startsWith('A')) return '#28a745'; // Green for A grades
+    if (gradeStr.startsWith('B')) return '#007bff'; // Blue for B grades  
+    if (gradeStr.startsWith('C')) return '#ffc107'; // Yellow for C grades
+    if (gradeStr.startsWith('D')) return '#fd7e14'; // Orange for D grades
+    if (gradeStr === 'F') return '#dc3545'; // Red for F grade
+    
+    return '#6c757d'; // Gray for unknown grades
   };
 
   const fetchInquiries = async (studentSID) => {
@@ -997,19 +1181,23 @@ const StudentDashboard = () => {
               // Get course details from current semester courses
               const courseDetails = (currentSemesterCourses || []).find(course => course.cid === classItem.cid);
               
-              // Get location details (corrected column name: 'location' not 'venue')
+              // Get location details (correct column name: 'venue')
               let locationDetails = null;
               if (classItem.vid) {
                 const { data: locationData, error: locationError } = await supabase
                   .from('location')
-                  .select('vid, location')
+                  .select('vid, venue')
                   .eq('vid', classItem.vid)
                   .single();
                 
                 console.log('Debug: Location query for vid', classItem.vid, ':', { locationData, locationError });
                 
                 if (!locationError && locationData) {
-                  locationDetails = locationData;
+                  locationDetails = {
+                    vid: locationData.vid,
+                    venue: locationData.venue,
+                    location: locationData.venue // Map venue to 'location' for UI consistency
+                  };
                 }
               }
 
@@ -1035,7 +1223,7 @@ const StudentDashboard = () => {
               return {
                 ...classItem,
                 course: courseDetails || { cid: classItem.cid, cname: 'Unknown Course', credits: null, year: null, semester: null },
-                location: locationDetails || { vid: classItem.vid, location: 'Unknown Location' },
+                location: locationDetails || { vid: classItem.vid, venue: 'Unknown Location', location: 'Unknown Location' },
                 lecturer: lecturerDetails || { lid: classItem.lid, name: 'Unknown Lecturer' }
               };
             })
@@ -1076,24 +1264,28 @@ const StudentDashboard = () => {
               // Get course details for this exam's cid from exam relevant courses
               const courseDetails = examRelevantCourses.find(course => course.cid === exam.cid);
               
-              // Get location details for this exam's Vid (corrected column name)
+              // Get location details for this exam's Vid (correct column name: 'venue')
               let locationDetails = null;
               if (exam.Vid) {
                 const { data: locationData, error: locationError } = await supabase
                   .from('location')
-                  .select('vid, location')
+                  .select('vid, venue')
                   .eq('vid', exam.Vid)
                   .single();
                 
                 if (!locationError && locationData) {
-                  locationDetails = locationData;
+                  locationDetails = {
+                    vid: locationData.vid,
+                    venue: locationData.venue,
+                    location: locationData.venue // Map venue to 'location' for UI consistency
+                  };
                 }
               }
               
               return {
                 ...exam,
                 course: courseDetails || { cid: exam.cid, cname: 'Unknown Course', year: null, semester: null },
-                location: locationDetails || { vid: exam.Vid, location: 'Unknown Location' }
+                location: locationDetails || { vid: exam.Vid, venue: 'Unknown Location', location: 'Unknown Location' }
               };
             })
           );
@@ -3204,38 +3396,168 @@ const StudentDashboard = () => {
             {/* Exam Results Tab */}
             {activeTab === 'results' && (
               <div className="exam-results">
-                <h3>Exam Results</h3>
-                {examResults.length > 0 ? (
-                  <div style={{ overflowX: 'auto' }}>
+                <h3>📊 Academic Results</h3>
+                
+                {examResultsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '50px' }}>
+                    <div style={{ fontSize: '18px', marginBottom: '20px' }}>🔄 Loading Exam Results...</div>
+                    <div style={{ fontSize: '14px', color: '#6c757d' }}>
+                      Fetching your academic records and calculating GPA...
+                    </div>
+                  </div>
+                ) : examResults && examResults.groupedResults && Object.keys(examResults.groupedResults).length > 0 ? (
+                  <div>
+                    {/* Overall GPA Display */}
+                    <div style={{
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      padding: '20px',
+                      borderRadius: '8px',
+                      marginBottom: '30px',
+                      textAlign: 'center',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}>
+                      🎓 Overall GPA: {examResults.overallGPA}
+                    </div>
+
+                    {/* Results by Semester */}
+                    {Object.keys(examResults.groupedResults)
+                      .sort((a, b) => {
+                        const aGroup = examResults.groupedResults[a];
+                        const bGroup = examResults.groupedResults[b];
+                        if (aGroup.year !== bGroup.year) {
+                          return aGroup.year - bGroup.year;
+                        }
+                        return aGroup.semester - bGroup.semester;
+                      })
+                      .map((semesterKey) => {
+                        const semesterData = examResults.groupedResults[semesterKey];
+                        return (
+                          <div key={semesterKey} style={{ marginBottom: '40px' }}>
+                            {/* Semester Header with GPA */}
+                            <div style={{
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              padding: '15px 20px',
+                              borderRadius: '8px 8px 0 0',
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}>
+                              <span>📚 {semesterKey}</span>
+                              <span>Semester GPA: {semesterData.semesterGPA}</span>
+                            </div>
+
+                            {/* Results Table for this semester */}
+                            <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderTop: 'none' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#28a745', color: 'white' }}>
-                          <th style={{ padding: '12px', border: '1px solid #ddd' }}>Result ID</th>
-                          <th style={{ padding: '12px', border: '1px solid #ddd' }}>Exam ID</th>
-                          <th style={{ padding: '12px', border: '1px solid #ddd' }}>Marks</th>
-                          <th style={{ padding: '12px', border: '1px solid #ddd' }}>Grade</th>
-                          <th style={{ padding: '12px', border: '1px solid #ddd' }}>GPA</th>
+                                  <tr style={{ backgroundColor: '#f8f9fa', color: '#333' }}>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Course Code</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Course Name</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>Credits</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>Type</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>Marks</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>Grade</th>
+                                    <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>Grade Points</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {examResults.map((result, index) => (
-                          <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
-                            <td style={{ padding: '12px', border: '1px solid #ddd' }}>{result.resultid}</td>
-                            <td style={{ padding: '12px', border: '1px solid #ddd' }}>{result.examid}</td>
-                            <td style={{ padding: '12px', border: '1px solid #ddd' }}>{result.marks}</td>
+                                  {semesterData.results.map((result, index) => (
+                                    <tr key={result.resultid || index} style={{ 
+                                      backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white',
+                                      transition: 'background-color 0.2s'
+                                    }}>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', fontWeight: 'bold' }}>
+                                        {result.course.cid}
+                                      </td>
                             <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                              <span style={{ fontWeight: 'bold', color: result.grade && result.grade.startsWith('A') ? 'green' : result.grade && result.grade.startsWith('F') ? 'red' : 'orange' }}>
+                                        {result.course.cname}
+                                      </td>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        {result.course.credits}
+                                      </td>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <span style={{
+                                          padding: '4px 8px',
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                          fontWeight: 'bold',
+                                          backgroundColor: result.course.type === 'core' ? '#007bff' : '#6c757d',
+                                          color: 'white'
+                                        }}>
+                                          {result.course.type?.toUpperCase() || 'UNKNOWN'}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>
+                                        {result.marks}
+                                      </td>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <span style={{ 
+                                          fontWeight: 'bold', 
+                                          padding: '6px 10px',
+                                          borderRadius: '4px',
+                                          backgroundColor: getGradeColor(result.grade),
+                                          color: 'white'
+                                        }}>
                                 {result.grade}
                               </span>
                             </td>
-                            <td style={{ padding: '12px', border: '1px solid #ddd' }}>{result.gpa}</td>
+                                      <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>
+                                        {result.gradePoints?.toFixed(1) || '0.0'}
+                                      </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                            </div>
+
+                            {/* Semester Summary */}
+                            <div style={{
+                              backgroundColor: '#e9ecef',
+                              padding: '15px 20px',
+                              borderRadius: '0 0 8px 8px',
+                              border: '1px solid #ddd',
+                              borderTop: 'none',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontSize: '14px',
+                              fontWeight: 'bold'
+                            }}>
+                              <span>📈 Total Credits: {semesterData.totalCredits}</span>
+                              <span>🎯 Grade Points: {semesterData.totalGradePoints.toFixed(2)}</span>
+                              <span>📊 Semester GPA: {semesterData.semesterGPA}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 ) : (
-                  <p>No exam results found.</p>
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '60px 20px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '8px',
+                    color: '#6c757d'
+                  }}>
+                    <h4>📋 No Exam Results Found</h4>
+                    <p>Your academic results will appear here once they are available.</p>
+                    
+                    {/* Debug info */}
+                    <div style={{ marginTop: '20px', fontSize: '12px', color: '#666' }}>
+                      <p><strong>Debug Info:</strong></p>
+                      <p>Student ID: {studentData?.sid || 'Not loaded'}</p>
+                      <p>Results data type: {typeof examResults}</p>
+                      <p>Has grouped results: {examResults?.groupedResults ? 'Yes' : 'No'}</p>
+                      <p>Raw results count: {examResults?.rawResults?.length || 0}</p>
+                      <p>Check browser console for detailed logs.</p>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
