@@ -2,15 +2,20 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import Home from "./components/Home";
 import About from "./components/About";
 import Login from "./components/Login";
+
 import ExamDashboard from "./components/exam/ExamDashboard";
 import AcademicCordinatorDashboard from "./components/academic-cordinator/AcademicCordinatorDashboard";
 import TimetableDashboard from "./components/timetable/TimetableDashboard";
+import StudentDashboard from "./components/student/StudentDashboard";
 import StudentControlDashboard from "./components/student-control/StudentControlDashboard";
+
 import StudentRegistration from "./components/student-control/StudentRegistration";
 import StudentRegistrationAndAccountCreation from "./components/student-control/StudentRegistrationAndAccountCreation";
 import StudentAccountCreation from "./components/student-control/StudentAccountCreation";
-import StudentDashboard from "./components/student/StudentDashboard";
+import StudentEnrollmentManagement from "./components/student-control/StudentEnrollmentManagement";
+import StudentInquiriesManagement from "./components/student-control/StudentInquiriesManagement";
 import PaymentDetails from "./components/student/PaymentDetails";
+
 import "./components/Dashboard.css";
 
 // Protected Route Component
@@ -85,6 +90,24 @@ function App() {
             </ProtectedRoute>
           } 
         />
+         <Route 
+          path="/student-enrollment" 
+          element={
+            <ProtectedRoute>
+              <StudentEnrollmentManagement />
+            </ProtectedRoute>
+          } 
+        />
+
+         <Route 
+          path="/student-inquiries-management" 
+          element={
+            <ProtectedRoute>
+              <StudentInquiriesManagement />
+            </ProtectedRoute>
+          } 
+        />
+
         <Route 
           path="/student-dashboard" 
           element={
