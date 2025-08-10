@@ -6,7 +6,15 @@ const StudentControlDashboard = () => {
   const navigate = useNavigate();
 
   const handleStudentRegistrationClick = () => {
-    navigate('/student-registration');
+    navigate('/student-registration-and-account-creation');
+  };
+
+  const handleStudentEnrollmentClick = () => {
+    navigate('/student-enrollment');
+  };
+
+  const handleStudentInquiriesClick = () => {
+    navigate('/student-inquiries-management');
   };
 
   return (
@@ -20,8 +28,12 @@ const StudentControlDashboard = () => {
           <p>Welcome to the Student Control Management System</p>
           <div className="dashboard-actions">
             <div className="action-card" onClick={handleStudentRegistrationClick} style={{ cursor: 'pointer' }}>
-              <h3>Student Registration</h3>
-              <p>Manage student enrollment and registration</p>
+              <h3>Student Registration and Account Creation</h3>
+              <p>Manage student registration, create accounts, and handle credentials</p>
+            </div>
+            <div className="action-card" onClick={handleStudentEnrollmentClick} style={{ cursor: 'pointer' }}>
+              <h3>Student Enrollment</h3>
+              <p>Manage student course enrollment and semester registration</p>
             </div>
             <div className="action-card">
               <h3>Academic Records</h3>
@@ -30,6 +42,10 @@ const StudentControlDashboard = () => {
             <div className="action-card">
               <h3>Attendance Tracking</h3>
               <p>Monitor student attendance and participation</p>
+            </div>
+            <div className="action-card" onClick={handleStudentInquiriesClick} style={{ cursor: 'pointer' }}>
+              <h3>Student Inquiries</h3>
+              <p>View and respond to student inquiries and requests</p>
             </div>
           </div>
         </div>
