@@ -17,11 +17,13 @@ import StudentInquiriesManagement from "./components/student-control/StudentInqu
 import PaymentDetails from "./components/student/PaymentDetails";
 
 import "./components/Dashboard.css";
+import ExamResult from "./components/exam/ExamResult";
+import ExamTimetable from "./components/exam/ExamTimetable";
+import ExamAdmission  from "./components/exam/ExamAdmission";
+import AddStudentIntoExam from "./components/exam/Exam";
+import ExamAttendance from "./components/exam/ExamAttendance";
 
-// Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  // In a real app, you would check if the user is authenticated
-  // For now, we'll just render the children
   return children;
 };
 
@@ -32,39 +34,88 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
-        
-        {/* Protected Routes for different roles */}
-        <Route 
-          path="/exam-dashboard" 
+
+        <Route
+          path="/exam-dashboard"
           element={
             <ProtectedRoute>
               <ExamDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/academic-cordinator-dashboard" 
+        <Route
+          path="/exam-result"
+          element={
+            <ProtectedRoute>
+              <ExamResult />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exam"
+          element={
+            <ProtectedRoute>
+              <AddStudentIntoExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exam-admission"
+          element={
+            <ProtectedRoute>
+              <ExamAdmission />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exam-timetable"
+          element={
+            <ProtectedRoute>
+              <ExamTimetable />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exam-attendance"
+          element={
+            <ProtectedRoute>
+              <ExamAttendance />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/academic-cordinator-dashboard"
           element={
             <ProtectedRoute>
               <AcademicCordinatorDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/timetable-dashboard" 
+        <Route
+          path="/timetable-dashboard"
           element={
             <ProtectedRoute>
               <TimetableDashboard />
             </ProtectedRoute>
-          } 
+          }
+        /> 
+        <Route
+          path="/student-dashboard"
+          element={
+            <ProtectedRoute>
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
         />
-        <Route 
-          path="/student-control-dashboard" 
+
+        <Route
+          path="/student-control-dashboard"
           element={
             <ProtectedRoute>
               <StudentControlDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route 
           path="/student-registration" 
@@ -114,7 +165,7 @@ function App() {
             <ProtectedRoute>
               <StudentDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route 
           path="/payment-details" 
