@@ -24,6 +24,19 @@ import ExamAdmission  from "./components/exam/ExamAdmission";
 import AddStudentIntoExam from "./components/exam/Exam";
 //import ExamAttendance from "./components/exam/ExamAttendance";
 
+
+import StudentDetails from "./components/academic-cordinator/StudentDetails";
+import TimetableDisplay from './components/academic-cordinator/LectureTimeTable';
+import ViewMyownTimetable from './components/academic-cordinator/ViewMyownTimetable';
+import EDashboard from "./components/academic-cordinator/EDashboard";
+import ExamAttendenceView from "./components/academic-cordinator/examattendenceview";
+
+import AcademicConfirmAttendence from './components/academic-cordinator/AcademicConfirmAttendence';
+import LectureAttendanceConfirm from './components/academic-cordinator/LectureAttendanceConfirm';
+import ConfirmAttendence from "./components/academic-cordinator/confirmattendence";
+import AcademicFullView from './components/academic-cordinator/AcademicFullView';
+
+
 const ProtectedRoute = ({ children }) => {
   return children;
 };
@@ -77,14 +90,7 @@ function App() {
           }
         />
 
-        <Route
-          path="/academic-cordinator-dashboard"
-          element={
-            <ProtectedRoute>
-              <AcademicCordinatorDashboard />
-            </ProtectedRoute>
-          }
-        />
+     
         <Route
           path="/timetable-dashboard"
           element={
@@ -159,7 +165,37 @@ function App() {
             </ProtectedRoute>
           } 
         />
+        <Route path="/student-details" 
+          element={<StudentDetails />} />
+     
+        <Route path="/lecture-time-table"
+          element={<TimetableDisplay />} />
         
+
+         <Route 
+                  path="/academic-coordinator-dashboard" 
+                  element={
+                    <ProtectedRoute>
+                       <AcademicCordinatorDashboard />
+                    </ProtectedRoute>
+          } 
+        />
+        <Route path="/" element={<StudentDetails />} />
+        <Route path="/view-my-own-timetable" element={<ViewMyownTimetable />} />
+    
+        
+        <Route path="/academic-confirm-attendance" element={<AcademicConfirmAttendence />} />
+        <Route path="/lecture-attendance-confirm/:lectureId" element={<LectureAttendanceConfirm />} />
+        <Route path="/examattendenceview" element={<ExamAttendenceView />} />
+        <Route path="/confirmattendence" element={<ConfirmAttendence />} />
+        
+        <Route path="/e-dashboard" element={<EDashboard />} />
+        <Route path="/exam-attendence" element={<ExamAttendenceView />} />
+        <Route path="/exam-attendence/download" element={<div style={{padding:20}}>Download page (implement)</div>} />
+        <Route path="/exam-attendence/upload" element={<div style={{padding:20}}>Upload page (implement)</div>} />
+        <Route path="/exam-attendence/confirm" element={<div style={{padding:20}}>Confirm page (implement)</div>} />
+          <Route path="/academic-full-view" element={<AcademicFullView />} />
+
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
