@@ -10,7 +10,8 @@ export default function CalendarView({
   cursor = new Date(),        // JS Date that the view is centered on
   events = [],                // [{ date:'YYYY-MM-DD', starttime:'HH:MM:SS', endtime:'HH:MM:SS', cid, vid, type:'class'|'exam' }]
   onPrev, onToday, onNext,    // navigation handlers
-  onAdd                       // ({date:'YYYY-MM-DD', start:'HH:MM', end:'HH:MM'})
+  onAdd,                      // ({date:'YYYY-MM-DD', start:'HH:MM', end:'HH:MM'})
+  onEventClick                // optional: (event) => void
 }) {
 
   /* ===================== MONTHY DATA ===================== */
@@ -96,7 +97,7 @@ export default function CalendarView({
                 </div>
 
                 {list.map((ev, i) => (
-                  <div key={i} className={`event-chip ${ev.type === 'exam' ? 'exam' : ''}`}>
+                  <div key={i} className={`event-chip ${ev.type === 'exam' ? 'exam' : ''}`} onClick={() => onEventClick && onEventClick(ev)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onEventClick && onEventClick(ev); }}>
                     <div style={{ fontWeight: 600 }}>{ev.cid}</div>
                     <div style={{ fontSize: 11, color: '#667085' }}>
                       {ev.starttime?.slice(0, 5)}–{ev.endtime?.slice(0, 5)} — Room {ev.vid}
@@ -140,7 +141,7 @@ export default function CalendarView({
                     </div>
 
                     {list.map((ev, i) => (
-                      <div key={i} className={`pill ${ev.type === 'exam' ? 'exam' : ''}`}>
+                      <div key={i} className={`pill ${ev.type === 'exam' ? 'exam' : ''}`} onClick={() => onEventClick && onEventClick(ev)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onEventClick && onEventClick(ev); }}>
                         <div style={{ fontWeight: 600 }}>{ev.cid}</div>
                         <div style={{ fontSize: 11, color: '#667085' }}>Room {ev.vid}</div>
                       </div>

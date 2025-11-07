@@ -35,7 +35,6 @@ export default function ExamTable({ loading, rows = [], onChangeStatus }) {
           <thead>
             <tr>
               <th>Course</th>
-              <th>Course Name</th>
               <th>Exam Type</th>
               <th>Exam Category</th>
               <th>Date</th>
@@ -50,17 +49,16 @@ export default function ExamTable({ loading, rows = [], onChangeStatus }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10} className="tt-cell-center">Loading…</td>
+                <td colSpan={9} className="tt-cell-center">Loading…</td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="tt-cell-center">No exams found.</td>
+                <td colSpan={9} className="tt-cell-center">No exams found.</td>
               </tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id}>
                   <td className="mono">{r.cid || "—"}</td>
-                  <td>{r.course_name || "—"}</td>
                   <td>{r.exam_type || "—"}</td>
                   <td>{r.exam_category || "—"}</td>
                   <td>{r.date || "—"}</td>

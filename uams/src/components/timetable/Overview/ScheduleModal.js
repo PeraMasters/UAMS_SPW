@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import supabase from "../../../lib/supabaseClient";
 import "./schedule-modal.css";
 
-export default function ScheduleModal({ open, onClose, onSaved, slot }) {
+export default function ScheduleModal({ open, onClose, onSaved, slot, editing }) {
   // --------------------- state ---------------------
   const [eventType, setEventType] = useState("Lecture"); // 'Lecture' | 'Exam'
 
@@ -75,6 +75,19 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
     if (slot?.start) setStart(slot.start);
     if (slot?.end)   setEnd(slot.end);
   }, [open, slot]);
+
+  // Prefill when editing existing event
+  useEffect(() => {
+    if (!open || !editing) return;
+    if (editing.type === 'exam') setEventType('Exam'); else setEventType('Lecture');
+    if (editing.date) setDate(editing.date);
+    if (editing.starttime) setStart(String(editing.starttime).slice(0,5));
+    if (editing.endtime) setEnd(String(editing.endtime).slice(0,5));
+    if (editing.cid != null) setCourseId(editing.cid);
+    if (editing.lid != null) setLecturerId(editing.lid);
+    if (editing.vid != null) setRoomVid(editing.vid);
+    if (editing.examcategory) setExamCategory(editing.examcategory);
+  }, [open, editing]);
 
   // Reset form selections when switching between Lecture and Exam, but keep date/time
   useEffect(() => {
@@ -480,6 +493,58 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
 
           {/* Actions */}
           <div className="tt-actions">
+            {editing && (
+              <button
+                className="tt-btn-ghost"
+                onClick={async () => {
+                  try {
+                    if (editing.type === 'exam') {
+                      const id = editing.examtimetableid || editing.id;
+                      const { error } = await supabase
+                        .from('examtimetable')
+                        .delete()
+                        .eq('examtimetableid', id);
+                      if (error) throw error;
+                    } else {
+                      const id = editing.classtimetableid || editing.id;
+                      // Code-level cascade: delete related attendance then the lecture
+                      let count = null;
+                      let attendanceTableExists = true;
+                      const pre = await supabase
+                        .from('lectureattendance')
+                        .select('classtimetableid', { count: 'exact', head: true })
+                        .eq('classtimetableid', id);
+                      if (pre.error) {
+                        // If table doesn't exist, proceed with lecture delete only
+                        attendanceTableExists = !String(pre.error.message || '').includes('does not exist');
+                      } else {
+                        count = pre.count ?? null;
+                      }
+                      if (attendanceTableExists && typeof count === 'number' && count > 0) {
+                        const ok = window.confirm(`This lecture has ${count} attendance record(s). Deleting the lecture will also delete those records. Continue?`);
+                        if (!ok) return;
+                        const delAtt = await supabase
+                          .from('lectureattendance')
+                          .delete()
+                          .eq('classtimetableid', id);
+                        if (delAtt.error) throw delAtt.error;
+                      }
+                      const delLecture = await supabase
+                        .from('classtimetable')
+                        .delete()
+                        .eq('classtimetableid', id);
+                      if (delLecture.error) throw delLecture.error;
+                    }
+                    onSaved && onSaved();
+                    onClose && onClose();
+                  } catch (e) {
+                    alert(e.message || 'Failed to delete');
+                  }
+                }}
+              >
+                Delete
+              </button>
+            )}
             <button className="tt-btn-ghost" onClick={onClose}>Cancel</button>
             <button
               className="tt-btn-primary"
@@ -488,40 +553,66 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
                 if (requiredMissing) return;
                 setSaving(true);
                 try {
-                  if (eventType === "Lecture") {
-                    const { error } = await supabase.from("classtimetable").insert({
-                      cid: courseId,
-                      lid: lecturerId,
-                      vid: roomVid,
-                      date,
-                      starttime: start,
-                      endtime: end,
-                    });
-                  if (error) throw error;
-                } else {
-                  const { error } = await supabase.from("examtimetable").insert({
-                    cid: courseId,
-                    lid: lecturerId,
-                    vid: roomVid,
-                    date,
-                    starttime: start,
-                    endtime: end,
-                    examcategory: examCategory,
-                    Exam_Type: "Proper",
-                    Status: "Scheduled",
-                  });
-                  if (error) throw error;
-                }
+                  const isEdit = !!editing;
+                  if (isEdit) {
+                    if (eventType === 'Lecture') {
+                      const id = editing?.classtimetableid || editing?.id;
+                      const { error } = await supabase
+                        .from('classtimetable')
+                        .update({ cid: courseId, lid: lecturerId, vid: roomVid, date, starttime: start, endtime: end })
+                        .eq('classtimetableid', id);
+                      if (error) throw error;
+                    } else {
+                      const id = editing?.examtimetableid || editing?.id;
+                      const { error } = await supabase
+                        .from('examtimetable')
+                        .update({ cid: courseId, lid: lecturerId, vid: roomVid, date, starttime: start, endtime: end, examcategory: examCategory })
+                        .eq('examtimetableid', id);
+                      if (error) throw error;
+                    }
+                  } else {
+                    if (eventType === 'Lecture') {
+                      // Handle recurrence for lectures. For 'Weekly', create 12 weeks by default.
+                      // Use local date arithmetic to avoid UTC timezone shifts.
+                      const pad2 = (n) => String(n).padStart(2, '0');
+                      const fmtDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+                      if (recurring === 'Weekly') {
+                        const rows = [];
+                        const [y,m,dy] = (date || '').split('-').map(Number);
+                        const startDate = new Date(y, (m||1)-1, dy || 1);
+                        for (let i = 0; i < 12; i++) {
+                          const d = new Date(startDate);
+                          d.setDate(d.getDate() + i * 7);
+                          rows.push({
+                            cid: courseId,
+                            lid: lecturerId,
+                            vid: roomVid,
+                            date: fmtDate(d),
+                            starttime: start,
+                            endtime: end,
+                          });
+                        }
+                        const { error } = await supabase.from('classtimetable').insert(rows);
+                        if (error) throw error;
+                      } else {
+                        const { error } = await supabase.from('classtimetable').insert({ cid: courseId, lid: lecturerId, vid: roomVid, date, starttime: start, endtime: end });
+                        if (error) throw error;
+                      }
+                    } else {
+                      const { error } = await supabase.from('examtimetable').insert({ cid: courseId, lid: lecturerId, vid: roomVid, date, starttime: start, endtime: end, examcategory: examCategory, Exam_Type: 'Proper', Status: 'Scheduled' });
+                      if (error) throw error;
+                    }
+                  }
                   onSaved && onSaved();
                   onClose && onClose();
                 } catch (e) {
-                  alert(e.message || "Failed to save");
+                  alert(e.message || 'Failed to save');
                 } finally {
                   setSaving(false);
                 }
               }}
             >
-              {saving ? "Saving..." : eventType === "Lecture" ? "Schedule Lecture" : "Schedule Exam"}
+              {saving ? 'Saving...' : (editing ? (eventType === 'Lecture' ? 'Update Lecture' : 'Update Exam') : (eventType === 'Lecture' ? 'Schedule Lecture' : 'Schedule Exam'))}
             </button>
           </div>
         </div>

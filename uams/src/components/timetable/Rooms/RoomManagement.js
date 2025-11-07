@@ -9,6 +9,15 @@ const todayISO = () =>
 
 const STATUS_OPTS = ["All", "Available", "Maintenance", "Occupied"];
 
+// Normalize status strings from DB/user input
+function normalizeStatus(s) {
+  const v = String(s || "").trim().toLowerCase();
+  if (v === "maintenance" || v === "maintainance") return "Maintenance";
+  if (v === "occupied") return "Occupied";
+  if (v === "available") return "Available";
+  return s || "Available";
+}
+
 function RoomFilters({ values, onChange, onView }) {
   const handle = (k) => (e) => onChange({ [k]: e.target.value });
 
@@ -189,11 +198,15 @@ export default function RoomManagement() {
         // 2) get occupied set for today+
         const occupied = await getOccupiedSet();
 
-        // 3) compute effective status
+        // 3) compute effective status (Maintenance takes precedence; then Occupied; then Available)
         let list = (data || []).map((r) => {
           const isOccupied = occupied.has(String(r.vid));
-          const effective =
-            isOccupied ? "Occupied" : r.status ? r.status : "Available";
+          const raw = normalizeStatus(r.status);
+          // User-set status (Available/Maintenance/Occupied) wins and persists.
+          // If no explicit status in DB, fall back to auto occupancy.
+          const effective = raw
+            ? raw
+            : (isOccupied ? "Occupied" : "Available");
           return {
             vid: r.vid,
             venue: r.venue || "",
@@ -252,25 +265,15 @@ export default function RoomManagement() {
 
   // Persist manual status update
   const handleChangeStatus = async (vid, newStatus) => {
-    // If the room is actually occupied by schedule, we still let you set it
-    // but the computed status on next reload will show "Occupied".
+    // Persist update
     const { error } = await supabase
       .from("location")
       .update({ status: newStatus })
       .eq("vid", vid);
     if (error) throw error;
 
-    // Update UI immediately
-    setRows((prev) =>
-      prev.map((r) => (String(r.vid) === String(vid) ? { ...r, status: newStatus } : r))
-    );
-    // Refresh KPIs (cheap local recompute)
-    setKpis((prev) => ({
-      ...prev,
-      available: rows.filter((r) => r.status === "Available").length,
-      maintenance: rows.filter((r) => r.status === "Maintenance").length,
-      occupied: rows.filter((r) => r.status === "Occupied").length,
-    }));
+    // Reload table to ensure KPIs and effective statuses are correct
+    await loadTable();
   };
 
   // KPI items (we keep your style classes)

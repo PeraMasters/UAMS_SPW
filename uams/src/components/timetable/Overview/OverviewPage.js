@@ -38,6 +38,7 @@ export default function OverviewPage(){
   // modal
   const [slot, setSlot] = useState(null);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null); // currently selected existing event
 
   /* ===== Top-bar purple button hookup =====
      Add id="topScheduleBtn" to your existing header button. */
@@ -135,8 +136,9 @@ export default function OverviewPage(){
   const next  = ()=> setCursor(d => { const x = new Date(d); mode==='week'? x.setDate(x.getDate()+7) : x.setMonth(x.getMonth()+1); return x; });
   const today = ()=> setCursor(new Date());
 
-  const openAdd = ({date, start, end})=>{ setSlot({date, start, end}); setOpen(true); };
-  const closeModal = (changed)=>{ setOpen(false); setSlot(null); if (changed) load(); };
+  const openAdd = ({date, start, end})=>{ setEditing(null); setSlot({date, start, end}); setOpen(true); };
+  const openEdit = (ev)=>{ setSlot(null); setEditing(ev); setOpen(true); };
+  const closeModal = (changed)=>{ setOpen(false); setSlot(null); setEditing(null); if (changed) load(); };
 
   return (
     <div className="overview-wrap">
@@ -165,6 +167,7 @@ export default function OverviewPage(){
         onToday={today}
         onNext={next}
         onAdd={openAdd}      // "+" uses the same modal
+        onEventClick={openEdit}
       />
 
       {/* schedule modal */}
@@ -172,6 +175,7 @@ export default function OverviewPage(){
         open={open}
         onClose={closeModal}
         slot={{ date: slot?.date || '', start: slot?.start || '', end: slot?.end || '' }}
+        editing={editing}
         defaults={{ faculties, applied }}   // modal can prefill with current filters
         onSaved={() => closeModal(true)}
       />
