@@ -21,8 +21,8 @@ export default function OverviewPage(){
   const [cursor, setCursor] = useState(new Date());
 
   // editing vs applied
-  const [draft, setDraft] = useState({ faculty:null, department:null, course:null, view:'' });
-  const [applied, setApplied] = useState({ faculty:null, department:null, course:null, view:'' });
+  const [draft, setDraft] = useState({ faculty:null, degree:null, course:null, view:'' });
+  const [applied, setApplied] = useState({ faculty:null, degree:null, course:null, view:'' });
 
   // master lists
   const [faculties, setFaculties] = useState([]);
@@ -32,7 +32,7 @@ export default function OverviewPage(){
   // events
   const [events, setEvents] = useState([]);
 
-  // restrict by faculty/department
+  // restrict by faculty/degree
   const [allowedCourseIds, setAllowedCourseIds] = useState(null); // null = no restriction
 
   // modal
@@ -60,15 +60,15 @@ export default function OverviewPage(){
     if (!draft.faculty) { setDepartments([]); setCourses([]); return; }
     const degs = await getDegreesByFaculty(Number(draft.faculty));
     setDepartments(Array.isArray(degs)?degs:[]);
-    setDraft(p=>({ ...p, department:null, course:null }));
+    setDraft(p=>({ ...p, degree:null, course:null }));
   })(); }, [draft.faculty]);
 
   useEffect(()=>{ (async()=>{
-    if (!draft.department) { setCourses([]); return; }
-    const cs = await getCoursesByDegree(draft.department);
+    if (!draft.degree) { setCourses([]); return; }
+    const cs = await getCoursesByDegree(draft.degree);
     setCourses(Array.isArray(cs)?cs:[]);
     setDraft(p=>({ ...p, course:null }));
-  })(); }, [draft.department]);
+  })(); }, [draft.degree]);
 
   /* ===== date range ===== */
   const range = useMemo(()=>{
@@ -99,15 +99,15 @@ export default function OverviewPage(){
   /* ===== apply filters ===== */
   const applyFilters = () => setApplied({ ...draft });
 
-  // build allowed cids when applied faculty/department changes
+  // build allowed cids when applied faculty/degree changes
   useEffect(() => {
     (async () => {
-      if (!applied.faculty && !applied.department) {
+      if (!applied.faculty && !applied.degree) {
         setAllowedCourseIds(null);
         return;
       }
-      if (applied.department) {
-        const cs = await getCoursesByDegree(applied.department);
+      if (applied.degree) {
+        const cs = await getCoursesByDegree(applied.degree);
         setAllowedCourseIds(new Set((cs || []).map(c => c.cid)));
         return;
       }
@@ -119,7 +119,7 @@ export default function OverviewPage(){
         return;
       }
     })();
-  }, [applied.faculty, applied.department]);
+  }, [applied.faculty, applied.degree]);
 
   const filtered = useMemo(()=>{
     return events.filter(ev=>{

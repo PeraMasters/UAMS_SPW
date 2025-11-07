@@ -6,7 +6,7 @@ import './overview.css';
  * faculties:    [{facultyid, fname}]
  * departments:  [{degreeid, dname, facultyid}]
  * courses:      [{cid, cname, degreeid}]
- * draft:        { faculty, department, course, view }
+ * draft:        { faculty, degree, course, view }
  * onDraftChange(patch)
  * onApply()
  */
@@ -28,8 +28,8 @@ export default function FiltersBar({
 
   // courses under selected degree
   const courseOpts = useMemo(
-    () => !draft.department ? [] : courses.filter(c => c.degreeid === draft.department),
-    [courses, draft.department]
+    () => !draft.degree ? [] : courses.filter(c => c.degreeid === draft.degree),
+    [courses, draft.degree]
   );
 
   return (
@@ -44,7 +44,7 @@ export default function FiltersBar({
           <label>Faculty</label>
           <select
             value={draft.faculty || ''}
-            onChange={(e) => set({ faculty: e.target.value || null, department: null, course: null })}
+            onChange={(e) => set({ faculty: e.target.value || null, degree: null, course: null })}
           >
             <option value="">All Faculties</option>
             {faculties.map(f => (
@@ -61,14 +61,14 @@ export default function FiltersBar({
             onChange={(e) => set({ degree: e.target.value || null, course: null })}
             disabled={!draft.faculty}
           >
-            <option value="">{draft.faculty ? 'All Departments' : 'Select a faculty first'}</option>
+            <option value="">{draft.faculty ? 'All Degrees' : 'Select a faculty first'}</option>
             {deptOpts.map(d => (
               <option key={d.degreeid} value={d.degreeid}>{d.dname}</option>
             ))}
           </select>
         </div>
 
-        {/* Course = dropdown filtered by Department */}
+        {/* Course = dropdown filtered by Degree */}
         <div>
           <label>Course</label>
           <select

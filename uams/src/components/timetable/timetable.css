@@ -67,11 +67,11 @@
   border: 0;
   font-weight: 600;
   cursor: pointer;
+  color: #efca57;
 }
 .tt-btn-primary {
-  background: #fff;
-  color: var(--tt-primary-700);
-  box-shadow: 0 6px 14px rgba(255,255,255,.18), inset 0 0 0 1px rgba(255,255,255,.6);
+  background: #ffe6bf;
+  color: #efca57;
 }
 .tt-btn-primary:hover { opacity: .95; }
 .tt-btn-secondary {

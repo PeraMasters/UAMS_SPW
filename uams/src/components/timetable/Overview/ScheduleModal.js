@@ -30,6 +30,8 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
   const [altRooms, setAltRooms] = useState([]);
   const [altTime, setAltTime] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Exam-only fields
+  const [examCategory, setExamCategory] = useState("Mid"); // Mid | Practical | Final
 
   // --------------------- body scroll lock while open ---------------------
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
     setLecConflicts([]);
     setAltRooms([]);
     setAltTime(null);
+    setExamCategory("Mid");
   }, [eventType, open]);
 
   /* ====================== NORMALIZE SCHEMAS (unchanged) =======================
@@ -339,6 +342,21 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
                 {courseName && <div className="tt-help">{courseName}</div>}
               </div>
 
+              {eventType === "Exam" && (
+                <div className="tt-field">
+                  <label className="tt-label">Exam Category</label>
+                  <select
+                    className="tt-select"
+                    value={examCategory}
+                    onChange={(e) => setExamCategory(e.target.value)}
+                  >
+                    <option>Mid</option>
+                    <option>Practical</option>
+                    <option>Final</option>
+                  </select>
+                </div>
+              )}
+
               <div className="tt-field">
                 <label className="tt-label">Lecturer *</label>
                 <select
@@ -479,20 +497,21 @@ export default function ScheduleModal({ open, onClose, onSaved, slot }) {
                       starttime: start,
                       endtime: end,
                     });
-                    if (error) throw error;
-                  } else {
-                    const { error } = await supabase.from("examtimetable").insert({
-                      cid: courseId,
-                      lid: lecturerId,
-                      vid: roomVid,
-                      date,
-                      starttime: start,
-                      endtime: end,
-                      Exam_Type: "Proper",
-                      Status: "Scheduled",
-                    });
-                    if (error) throw error;
-                  }
+                  if (error) throw error;
+                } else {
+                  const { error } = await supabase.from("examtimetable").insert({
+                    cid: courseId,
+                    lid: lecturerId,
+                    vid: roomVid,
+                    date,
+                    starttime: start,
+                    endtime: end,
+                    examcategory: examCategory,
+                    Exam_Type: "Proper",
+                    Status: "Scheduled",
+                  });
+                  if (error) throw error;
+                }
                   onSaved && onSaved();
                   onClose && onClose();
                 } catch (e) {

@@ -1,6 +1,7 @@
 // src/components/timetable/Rooms/RoomManagement.js
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import supabase from "../../../lib/supabaseClient";
+import AddRoomModal from "./AddRoom";
 
 // Small helpers
 const todayISO = () =>
@@ -130,7 +131,7 @@ function RoomTable({ rows, loading, onChangeStatus }) {
 
 export default function RoomManagement() {
   // KPI snapshot
-  const [kpis, setKpis] = useState({ total: 0, available: 0, maintenance: 0 });
+  const [kpis, setKpis] = useState({ total: 0, available: 0, maintenance: 0, occupied: 0 });
 
   // Filters
   const [filters, setFilters] = useState({ q: "", status: "All" });
@@ -138,6 +139,14 @@ export default function RoomManagement() {
   // Data
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Add Room modal state and header-button hookup
+  const [openAdd, setOpenAdd] = useState(false);
+  useEffect(() => {
+    const handler = () => setOpenAdd(true);
+    document.addEventListener("tt.openAddRoomModal", handler);
+    return () => document.removeEventListener("tt.openAddRoomModal", handler);
+  }, []);
 
   const handleFilterChange = (partial) =>
     setFilters((prev) => ({ ...prev, ...partial }));
@@ -207,7 +216,8 @@ export default function RoomManagement() {
         const total = (data || []).length;
         const available = list.filter((r) => r.status === "Available").length;
         const maintenance = list.filter((r) => r.status === "Maintenance").length;
-        setKpis({ total, available, maintenance });
+        const occupiedCount = list.filter((r) => r.status === "Occupied").length;
+        setKpis({ total, available, maintenance, occupied: occupiedCount });
       } finally {
         setLoading(false);
       }
@@ -221,6 +231,24 @@ export default function RoomManagement() {
   }, [loadTable]);
 
   const handleView = () => loadTable(filters);
+
+  // Persist newly added room and refresh table
+  const handleSaveRoom = async (room) => {
+    try {
+      const payload = {
+        venue: room.venue,
+        status: room.status || "Available",
+        capacity: Number.isFinite(room.capacity) ? room.capacity : null,
+      };
+      const { error } = await supabase.from("location").insert(payload);
+      if (error) throw error;
+      setOpenAdd(false);
+      await loadTable();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save room. Please try again.");
+    }
+  };
 
   // Persist manual status update
   const handleChangeStatus = async (vid, newStatus) => {
@@ -241,6 +269,7 @@ export default function RoomManagement() {
       ...prev,
       available: rows.filter((r) => r.status === "Available").length,
       maintenance: rows.filter((r) => r.status === "Maintenance").length,
+      occupied: rows.filter((r) => r.status === "Occupied").length,
     }));
   };
 
@@ -249,6 +278,7 @@ export default function RoomManagement() {
     () => [
       { label: "Total Rooms", value: kpis.total },
       { label: "Available", value: kpis.available },
+      { label: "Occupied", value: kpis.occupied },
       { label: "Maintenance", value: kpis.maintenance },
     ],
     [kpis]
@@ -279,6 +309,13 @@ export default function RoomManagement() {
 
       {/* Table */}
       <RoomTable rows={rows} loading={loading} onChangeStatus={handleChangeStatus} />
+
+      {/* Add Room Modal */}
+      <AddRoomModal
+        isOpen={openAdd}
+        onClose={() => setOpenAdd(false)}
+        onSaved={handleSaveRoom}
+      />
     </>
   );
 }

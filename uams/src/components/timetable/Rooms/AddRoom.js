@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
  * Props:
  *  - isOpen: boolean
  *  - mode: 'create' | 'edit'
- *  - initialData?: { id?, venue?, building?, capacity?, status?, utilization? }
+ *  - initialData?: { id?, venue?, status? }
  *  - onClose: () => void
  *  - onSaved: (roomObj) => void
  *  - onDeleted?: (id) => void
@@ -25,10 +25,7 @@ export default function AddRoomModal({
 
   const defaults = useMemo(() => ({
     venue: initialData.venue || "",
-    building: initialData.building || "Computing",
-    capacity: Number.isFinite(initialData.capacity) ? initialData.capacity : 60,
     status: initialData.status || "Available",
-    utilization: Number.isFinite(initialData.utilization) ? initialData.utilization : 0,
   }), [initialData]);
 
   const [values, setValues] = useState(defaults);
@@ -42,18 +39,12 @@ export default function AddRoomModal({
     const v = e.target.value;
     setValues((cur) => ({
       ...cur,
-      [k]:
-        k === "capacity" || k === "utilization"
-          ? Number(v || 0)
-          : v,
+      [k]: v,
     }));
   };
 
   const validate = () => {
     if (!values.venue.trim()) return "Venue is required.";
-    if (!values.building.trim()) return "Building is required.";
-    if (values.capacity <= 0) return "Capacity must be greater than 0.";
-    if (values.utilization < 0 || values.utilization > 100) return "Utilization must be 0–100.";
     return "";
   };
 
@@ -91,29 +82,6 @@ export default function AddRoomModal({
           <div className="tt-form-row">
             <label htmlFor="rm-venue">Venue</label>
             <input id="rm-venue" className="tt-input" value={values.venue} onChange={handle("venue")} placeholder="e.g., C-101" />
-          </div>
-
-          {/* Building */}
-          <div className="tt-form-row">
-            <label htmlFor="rm-building">Building</label>
-            <select id="rm-building" className="tt-select" value={values.building} onChange={handle("building")}>
-              <option>Computing</option>
-              <option>Engineering</option>
-              <option>Business</option>
-              <option>Humanities</option>
-            </select>
-          </div>
-
-          {/* Capacity */}
-          <div className="tt-form-row">
-            <label htmlFor="rm-capacity">Capacity</label>
-            <input id="rm-capacity" type="number" className="tt-input" value={values.capacity} onChange={handle("capacity")} />
-          </div>
-
-          {/* Utilization */}
-          <div className="tt-form-row">
-            <label htmlFor="rm-util">Utilization (%)</label>
-            <input id="rm-util" type="number" className="tt-input" value={values.utilization} onChange={handle("utilization")} />
           </div>
 
           {/* Status */}
