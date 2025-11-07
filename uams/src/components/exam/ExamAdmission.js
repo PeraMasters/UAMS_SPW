@@ -1,335 +1,338 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-
-// Mock dropdown data
-const students = ["IT25069940", "IT20069940"];
-const years = ["2024", "2025"];
-const semesters = ["1", "2"];
-const courseIds = ["IT1010", "IT1014", "IT1015"];
-
-// Mock past admissions data (from your screenshots)
-const pastAdmissionsData = [
-  // Other payment
-  { sid: "IT25069940", year: "2025", semester: "1", studentStatus: "Repeat", paymentType: "Prorata", date: "2025-08-01", cid: "IT1010" },
-  { sid: "IT20069940", year: "2025", semester: "1", studentStatus: "Repeat", paymentType: "Repeat Module", date: "2025-08-06", cid: "IT1014" },
-  { sid: "IT20069940", year: "2025", semester: "1", studentStatus: "Repeat", paymentType: "Repeat Module", date: "2025-08-06", cid: "IT1015" },
-  { sid: "IT20069940", year: "2025", semester: "1", studentStatus: "Repeat", paymentType: "Repeat Module", date: "2025-08-08", cid: "IT1010" },
-  // Semester payment
-  { sid: "IT25069940", year: "2025", semester: "1", studentStatus: "Proper", paymentType: "Semester Payment", date: "2025-08-06", cid: "" },
-  { sid: "IT20069940", year: "2025", semester: "1", studentStatus: "Proper", paymentType: "Semester Payment", date: "2025-08-08", cid: "" },
-];
+import supabase from "../../lib/supabaseClient";
 
 export default function ExamAdmissionForm() {
   const navigate = useNavigate();
+  const printRef = useRef();
 
   const [sid, setSid] = useState("");
-  const [year, setYear] = useState("");
-  const [semester, setSemester] = useState("");
-  const [studentStatus, setStudentStatus] = useState("");
-  const [paymentType, setPaymentType] = useState("");
-  const [paymentOptions, setPaymentOptions] = useState([]);
-  const [date, setDate] = useState("");
   const [cid, setCid] = useState("");
-  const [attachment, setAttachment] = useState(null);
+  const [status, setStatus] = useState("Proper");
+  const [students, setStudents] = useState([]);
+  const [courseList, setCourseList] = useState([]);
   const [admissions, setAdmissions] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editIndex, setEditIndex] = useState(null);
-
-  const [showMyView, setShowMyView] = useState(false);
-  const [filterDate, setFilterDate] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showAdmissions, setShowAdmissions] = useState(false);
 
   useEffect(() => {
-    if (studentStatus === "Proper") {
-      setPaymentOptions(["Semester Payment"]);
-    } else if (studentStatus === "Repeat") {
-      setPaymentOptions(["Repeat Module", "Prorata"]);
-    } else {
-      setPaymentOptions([]);
+    loadInitial();
+  }, []);
+
+  // ✅ Load data from Supabase
+  async function loadInitial() {
+    setLoading(true);
+    try {
+      const [semPayRes, otherPayRes, studentRes, courseRes] = await Promise.all([
+        supabase.from("semester_payment").select("sid, amount, status"),
+        supabase.from("other_payment").select("sid, amount, status"),
+        supabase.from("student").select("sid, sname, batchid, degreeid"),
+        supabase.from("course").select("cid, cname"),
+      ]);
+
+      const semData = semPayRes.data || [];
+      const otherData = otherPayRes.data || [];
+      const allStudents = studentRes.data || [];
+      const courses = courseRes.data || [];
+
+      // ✅ Identify paid students
+      const paidSet = new Set();
+      const validStatus = ["paid", "completed", "done", "success", "ok"];
+
+      semData.forEach((p) => {
+        const s = String(p.status || "").trim().toLowerCase();
+        if (validStatus.includes(s) || (p.amount && Number(p.amount) > 0)) {
+          paidSet.add(String(p.sid));
+        }
+      });
+      otherData.forEach((p) => {
+        const s = String(p.status || "").trim().toLowerCase();
+        if (validStatus.includes(s) || (p.amount && Number(p.amount) > 0)) {
+          paidSet.add(String(p.sid));
+        }
+      });
+
+      // ✅ Add payment info to student list
+      const studentsWithStatus = allStudents.map((s) => ({
+        ...s,
+        isPaid: paidSet.has(String(s.sid)),
+      }));
+
+      // ✅ Manual students (always paid)
+      const manualStudents = [
+        { sid: "IT25069940", sname: "", isPaid: true },
+        { sid: "IT20069940", sname: "", isPaid: true },
+      ];
+
+      const finalStudents = [...studentsWithStatus, ...manualStudents];
+      setStudents(finalStudents);
+      setCourseList(courses);
+    } catch (err) {
+      console.error("loadInitial error:", err);
+    } finally {
+      setLoading(false);
     }
-  }, [studentStatus]);
+  }
 
-  const handleAttachmentChange = (e) => {
-    setAttachment(e.target.files[0] || null);
-  };
+  function validate() {
+    if (!sid) return alert("Select a student.");
+    if (!cid) return alert("Select a course.");
+    return true;
+  }
 
-  const handleDownload = (file) => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = file.name;
-      a.click();
-    }
-  };
-
-  const resetForm = () => {
-    setSid("");
-    setYear("");
-    setSemester("");
-    setStudentStatus("");
-    setPaymentType("");
-    setDate("");
-    setCid("");
-    setAttachment(null);
-    setIsEditing(false);
-    setEditIndex(null);
-  };
-
-  const handleSubmit = (e) => {
+  // ✅ Generate admission entry
+  async function handleGenerate(e) {
     e.preventDefault();
-    const newRecord = { sid, year, semester, studentStatus, paymentType, date, cid, attachment };
-    if (isEditing) {
-      const updated = [...admissions];
-      updated[editIndex] = newRecord;
-      setAdmissions(updated);
-    } else {
-      setAdmissions([...admissions, newRecord]);
+    if (!validate()) return;
+    setLoading(true);
+
+    try {
+      const student = students.find((s) => String(s.sid) === String(sid));
+      if (!student || !student.isPaid) {
+        alert("Selected student has no valid payment.");
+        setLoading(false);
+        return;
+      }
+
+      const payload = {
+        sid,
+        batchid: student.batchid || null,
+        degreeid: student.degreeid || null,
+        cid,
+        status,
+      };
+
+      const {  error } = await supabase.from("admission").insert([payload]).select();
+
+      if (error) {
+        console.error("Supabase error:", error);
+        throw new Error(error.message);
+      }
+
+      alert("Admission generated successfully!");
+
+      // ✅ Refresh admission list
+      const admRes = await supabase
+        .from("admission")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      setAdmissions(admRes.data || []);
+      setShowAdmissions(true); // show the list only after generation
+    } catch (err) {
+      console.error("handleGenerate error:", err);
+      alert("Error generating admission: " + (err.message || "Unknown error"));
+    } finally {
+      setLoading(false);
     }
-    resetForm();
+  }
+
+  // ✅ Print function
+  const handlePrint = () => {
+    const printContents = printRef.current.innerHTML;
+    const win = window.open("", "_blank");
+    win.document.write(`
+      <html>
+        <head>
+          <title>Admission List</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f5f5f5; }
+            h2 { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <h2>Exam Admission List</h2>
+          ${printContents}
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.print();
   };
 
-  const handleEdit = (index) => {
-    const record = admissions[index];
-    setSid(record.sid);
-    setYear(record.year);
-    setSemester(record.semester);
-    setStudentStatus(record.studentStatus);
-    setPaymentType(record.paymentType);
-    setDate(record.date);
-    setCid(record.cid);
-    setAttachment(record.attachment);
-    setIsEditing(true);
-    setEditIndex(index);
+  const navbarStyle = {
+    width: "100%",
+    backgroundColor: "#ecc82b",
+    height: 70,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0 24px",
   };
-
-  const handleDelete = (index) => {
-    const filtered = admissions.filter((_, i) => i !== index);
-    setAdmissions(filtered);
-    resetForm();
-  };
-
-  const filteredAdmissions = [
-    ...admissions,
-    ...pastAdmissionsData
-  ].filter((adm) => {
-    if (!filterDate) return true;
-    return new Date(adm.date) <= new Date(filterDate);
-  });
-
-  const fieldRow = { display: "flex", alignItems: "center", marginBottom: "10px" };
-  const labelStyle = { flex: "0 0 150px", fontWeight: "bold" };
-  const inputStyle = { flex: "1" };
-  const tableCellStyle = { border: "1px solid #ccc", padding: "5px" };
-  const tableHeaderStyle = { border: "1px solid #ccc", padding: "5px", backgroundColor: "#e3f2fd", fontWeight: "bold" };
-  const tableButtonStyle = { padding: "5px 10px", border: "none", borderRadius: "4px", cursor: "pointer", color: "white", fontSize: "14px" };
 
   return (
-    <div style={{ fontFamily: "Arial" }}>
-      {/* Navigation Bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#ecc82b", padding: "20px 40px" }}>
-        <div style={{ fontWeight: "bold", fontSize: "18px" }}>UAMS</div>
+    <>
+      {/* ✅ Top Nav */}
+      <div style={navbarStyle}>
+        <div style={{ fontSize: 24, fontWeight: "bold" }}>UAMS</div>
         <button
-          style={{ backgroundColor: "white", border: "1px solid #ccc", padding: "5px 10px", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}
           onClick={() => navigate("/exam-dashboard")}
+          style={{
+            background: "white",
+            border: "1px solid #ccc",
+            padding: "6px 10px",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
         >
           Exam Dashboard
         </button>
       </div>
 
-      <div style={{ maxWidth: "950px", margin: "20px auto" }}>
-        {/* Toggle My View */}
-        <div style={{ textAlign: "right", marginBottom: "10px" }}>
-          <button
-            style={{ backgroundColor: "#4CAF50", color: "white", padding: "8px 12px", border: "none", borderRadius: "5px", cursor: "pointer" }}
-            onClick={() => setShowMyView(!showMyView)}
-          >
-            {showMyView ? "Back to Form" : "My View"}
-          </button>
-        </div>
+      {/* ✅ Main Form */}
+      <div style={{ fontFamily: "Arial", maxWidth: 950, margin: "18px auto" }}>
+        <form
+          onSubmit={handleGenerate}
+          style={{
+            background: "#fff",
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            padding: 16,
+          }}
+        >
+          <h3>Generate Exam Admission</h3>
 
-        {/* My View Section */}
-        {showMyView ? (
-          <div style={{ border: "2px solid #ccc", borderRadius: "10px", padding: "15px", background: "#fdfdfd" }}>
-            <h3>Past Exam Admissions</h3>
-            <div style={{ marginBottom: "10px" }}>
-              <label style={{ fontWeight: "bold", marginRight: "10px" }}>Date:</label>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+          <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+            {/* Student dropdown */}
+            <div style={{ flex: 1 }}>
+              <label>Student</label>
+              <select
+                value={sid}
+                onChange={(e) => setSid(e.target.value)}
+                required
+                style={{ width: "100%", padding: 8, marginTop: 6 }}
+              >
+                <option value="">-- Select Student --</option>
+                {students.length === 0 ? (
+                  <option value="">No students found</option>
+                ) : (
+                  students.map((s) => (
+                    <option key={s.sid} value={s.sid} disabled={!s.isPaid}>
+                      {s.sid} - {s.sname}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={tableHeaderStyle}>SID</th>
-                  <th style={tableHeaderStyle}>Year</th>
-                  <th style={tableHeaderStyle}>Semester</th>
-                  <th style={tableHeaderStyle}>Status</th>
-                  <th style={tableHeaderStyle}>Payment Type</th>
-                  <th style={tableHeaderStyle}>Date</th>
-                  <th style={tableHeaderStyle}>CID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAdmissions.map((adm, i) => (
-                  <tr key={i}>
-                    <td style={tableCellStyle}>{adm.sid}</td>
-                    <td style={tableCellStyle}>{adm.year}</td>
-                    <td style={tableCellStyle}>{adm.semester}</td>
-                    <td style={tableCellStyle}>{adm.studentStatus}</td>
-                    <td style={tableCellStyle}>{adm.paymentType}</td>
-                    <td style={tableCellStyle}>{adm.date}</td>
-                    <td style={tableCellStyle}>{adm.cid || "N/A"}</td>
-                  </tr>
+
+            {/* Course dropdown */}
+            <div style={{ flex: 1 }}>
+              <label>Course (CID)</label>
+              <select
+                value={cid}
+                onChange={(e) => setCid(e.target.value)}
+                required
+                style={{ width: "100%", padding: 8, marginTop: 6 }}
+              >
+                <option value="">-- Select Course --</option>
+                {courseList.map((c) => (
+                  <option key={c.cid} value={c.cid}>
+                    {c.cid} - {c.cname}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
+
+            {/* Status dropdown */}
+            <div style={{ width: 160 }}>
+              <label>Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                style={{ width: "100%", padding: 8, marginTop: 6 }}
+              >
+                <option value="Proper">Proper</option>
+                <option value="Repeat">Repeat</option>
+              </select>
+            </div>
           </div>
-        ) : (
-          // Exam Admission Form
-          <div style={{ border: "2px solid #ccc", borderRadius: "10px", padding: "20px", backgroundColor: "#fdfdfd" }}>
-            <h2 style={{ textAlign: "center", marginBottom: "20px" }}>{isEditing ? "Edit Admission" : "Exam Admission Form"}</h2>
-            <form onSubmit={handleSubmit}>
-              {/* Student Details */}
-              <fieldset style={{ border: "1px solid #aaa", padding: "15px", marginBottom: "20px", borderRadius: "5px" }}>
-                <legend style={{ fontWeight: "bold" }}>Student Details</legend>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Student ID:</label>
-                  <select style={inputStyle} value={sid} onChange={(e) => setSid(e.target.value)} required>
-                    <option value="">-- Select SID --</option>
-                    {students.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Year:</label>
-                  <select style={inputStyle} value={year} onChange={(e) => setYear(e.target.value)} required>
-                    <option value="">-- Select Year --</option>
-                    {years.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Semester:</label>
-                  <select style={inputStyle} value={semester} onChange={(e) => setSemester(e.target.value)} required>
-                    <option value="">-- Select Semester --</option>
-                    {semesters.map((sem) => (
-                      <option key={sem} value={sem}>{sem}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Status:</label>
-                  <div style={inputStyle}>
-                    <label>
-                      <input type="radio" name="status" value="Proper" checked={studentStatus === "Proper"} onChange={(e) => setStudentStatus(e.target.value)} required /> Proper
-                    </label>
-                    <label style={{ marginLeft: "20px" }}>
-                      <input type="radio" name="status" value="Repeat" checked={studentStatus === "Repeat"} onChange={(e) => setStudentStatus(e.target.value)} /> Repeat
-                    </label>
-                  </div>
-                </div>
-              </fieldset>
 
-              {/* Payment Details */}
-              <fieldset style={{ border: "1px solid #aaa", padding: "15px", marginBottom: "20px", borderRadius: "5px" }}>
-                <legend style={{ fontWeight: "bold" }}>Payment Details</legend>
-                {studentStatus && (
-                  <div style={fieldRow}>
-                    <label style={labelStyle}>Payment Type:</label>
-                    <select style={inputStyle} value={paymentType} onChange={(e) => setPaymentType(e.target.value)} required>
-                      <option value="">-- Select Payment Type --</option>
-                      {paymentOptions.map((pt) => (
-                        <option key={pt} value={pt}>{pt}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Date:</label>
-                  <input style={inputStyle} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-                </div>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Course ID (CID):</label>
-                  <select style={inputStyle} value={cid} onChange={(e) => setCid(e.target.value)} required>
-                    <option value="">-- Select CID --</option>
-                    {courseIds.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </fieldset>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: "8px 14px",
+              background: "#1976d2",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            {loading ? "Processing..." : "Generate Admission"}
+          </button>
+        </form>
 
-              {/* Attachment */}
-              <fieldset style={{ border: "1px solid #aaa", padding: "15px", marginBottom: "20px", borderRadius: "5px" }}>
-                <legend style={{ fontWeight: "bold" }}>Attachment</legend>
-                <div style={fieldRow}>
-                  <label style={labelStyle}>Upload File:</label>
-                  <input style={inputStyle} type="file" onChange={handleAttachmentChange} />
-                </div>
-                {attachment && (
-                  <div style={{ marginLeft: "150px" }}>
-                    <p>{attachment.name}</p>
-                    <button type="button" onClick={() => handleDownload(attachment)}>Download</button>
-                  </div>
-                )}
-              </fieldset>
+        {/* ✅ Admission List + Print */}
+        {showAdmissions && (
+          <div style={{ marginTop: 20 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4>Admissions List</h4>
+              <button
+                onClick={handlePrint}
+                style={{
+                  background: "#4caf50",
+                  color: "white",
+                  border: "none",
+                  padding: "6px 10px",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                }}
+              >
+                Print Admission
+              </button>
+            </div>
 
-              {/* Buttons */}
-              <div style={{ textAlign: "center", marginBottom: "20px" }}>
-                <button type="submit" style={{ backgroundColor: "skyblue", color: "white", padding: "10px 15px", border: "none", borderRadius: "5px", cursor: "pointer", fontSize: "16px", marginRight: "10px" }}>
-                  {isEditing ? "Update Admission" : "Generate Admission"}
-                </button>
-                {isEditing && (
-                  <button type="button" onClick={resetForm} style={{ backgroundColor: "#f44336", color: "white", padding: "10px 15px", border: "none", borderRadius: "5px", cursor: "pointer", fontSize: "16px" }}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
-
-            {/* Admissions Table */}
-            {admissions.length > 0 && (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={tableHeaderStyle}>SID</th>
-                    <th style={tableHeaderStyle}>Year</th>
-                    <th style={tableHeaderStyle}>Semester</th>
-                    <th style={tableHeaderStyle}>Status</th>
-                    <th style={tableHeaderStyle}>Payment Type</th>
-                    <th style={tableHeaderStyle}>Date</th>
-                    <th style={tableHeaderStyle}>CID</th>
-                    <th style={tableHeaderStyle}>Attachment</th>
-                    <th style={tableHeaderStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {admissions.map((adm, index) => (
-                    <tr key={index}>
-                      <td style={tableCellStyle}>{adm.sid}</td>
-                      <td style={tableCellStyle}>{adm.year}</td>
-                      <td style={tableCellStyle}>{adm.semester}</td>
-                      <td style={tableCellStyle}>{adm.studentStatus}</td>
-                      <td style={tableCellStyle}>{adm.paymentType}</td>
-                      <td style={tableCellStyle}>{adm.date}</td>
-                      <td style={tableCellStyle}>{adm.cid}</td>
-                      <td style={tableCellStyle}>
-                        {adm.attachment ? (
-                          <button onClick={() => handleDownload(adm.attachment)}>Download</button>
-                        ) : "No file"}
-                      </td>
-                      <td style={tableCellStyle}>
-                        <button onClick={() => handleEdit(index)} style={{ ...tableButtonStyle, backgroundColor: "#2196F3", marginRight: "5px" }}>Edit</button>
-                        <button onClick={() => handleDelete(index)} style={{ ...tableButtonStyle, backgroundColor: "#f44336" }}>Delete</button>
-                      </td>
+            <div ref={printRef}>
+              {admissions.length === 0 ? (
+                <p>No admissions found.</p>
+              ) : (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    background: "#fff",
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>ID</th>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>SID</th>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>Batch</th>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>Degree</th>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>CID</th>
+                      <th style={{ border: "1px solid #ccc", padding: 8 }}>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody>
+                    {admissions.map((a) => (
+                      <tr key={a.admissionid || `${a.sid}-${a.cid}`}>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>
+                          {a.admissionid || "-"}
+                        </td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>{a.sid}</td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>{a.batchid}</td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>{a.degreeid}</td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>{a.cid}</td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>{a.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
       </div>
-    </div>
-  );
-}
+    </>
+    ); 
+  }
