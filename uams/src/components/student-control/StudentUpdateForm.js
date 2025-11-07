@@ -21,7 +21,6 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
   });
 
   const [faculties, setFaculties] = useState([]);
-  const [degrees, setDegrees] = useState([]);
   const [allDegrees, setAllDegrees] = useState([]);
   const [filteredDegrees, setFilteredDegrees] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -56,7 +55,9 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
   // Filter degrees when faculty is selected
   useEffect(() => {
     if (formData.facultyid) {
-      const filtered = allDegrees.filter(degree => degree.facultyid == formData.facultyid);
+      const filtered = allDegrees.filter(
+        (degree) => String(degree.facultyid) === String(formData.facultyid)
+      );
       setFilteredDegrees(filtered);
     } else {
       setFilteredDegrees([]);
@@ -91,7 +92,6 @@ const StudentUpdateForm = ({ onClose, onStudentUpdated, studentData }) => {
         console.error('Error fetching degrees:', error);
       } else {
         setAllDegrees(data || []);
-        setDegrees(data || []);
       }
     } catch (error) {
       console.error('Error:', error);

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import supabase from '../../lib/supabaseClient';
 
 // Mock dropdown data
 const students = ["IT25069940", "IT25087765"];

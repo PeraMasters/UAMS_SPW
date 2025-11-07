@@ -21,7 +21,6 @@ const StudentRegistrationForm = ({ onClose, onStudentAdded }) => {
   });
 
   const [faculties, setFaculties] = useState([]);
-  const [degrees, setDegrees] = useState([]);
   const [allDegrees, setAllDegrees] = useState([]); // Store all degrees
   const [filteredDegrees, setFilteredDegrees] = useState([]); // Store filtered degrees
   const [loading, setLoading] = useState(false);
@@ -35,7 +34,9 @@ const StudentRegistrationForm = ({ onClose, onStudentAdded }) => {
   // Filter degrees when faculty is selected
   useEffect(() => {
     if (formData.facultyid) {
-      const filtered = allDegrees.filter(degree => degree.facultyid == formData.facultyid);
+      const filtered = allDegrees.filter(
+        (degree) => String(degree.facultyid) === String(formData.facultyid)
+      );
       setFilteredDegrees(filtered);
       // Clear degree selection if current degree doesn't belong to selected faculty
       if (formData.degreeid) {
@@ -48,7 +49,7 @@ const StudentRegistrationForm = ({ onClose, onStudentAdded }) => {
       setFilteredDegrees([]);
       setFormData(prev => ({ ...prev, degreeid: '' }));
     }
-  }, [formData.facultyid, allDegrees]);
+  }, [formData.facultyid, formData.degreeid, allDegrees]);
 
   const fetchFaculties = async () => {
     try {
@@ -78,7 +79,6 @@ const StudentRegistrationForm = ({ onClose, onStudentAdded }) => {
         console.error('Error fetching degrees:', error);
       } else {
         setAllDegrees(data || []);
-        setDegrees(data || []); // Keep this for backward compatibility
       }
     } catch (error) {
       console.error('Error:', error);
@@ -138,7 +138,7 @@ const StudentRegistrationForm = ({ onClose, onStudentAdded }) => {
     setLoading(true);
     
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('student')
         .insert([formData])
         .select();
