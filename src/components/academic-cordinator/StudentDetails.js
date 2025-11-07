@@ -97,7 +97,7 @@ function StudentDetails() {
         }
       }
 
-      // 3. Fetch students with those sids (and other filters)
+      // 3. Fetch students with those sids 
       let query = supabase.from('student')
         .select('sid, f_name, l_name, nic, phone_no, email, status, facultyid, degreeid, admission_year');
       if (filters.facultyid) query = query.eq('facultyid', filters.facultyid);

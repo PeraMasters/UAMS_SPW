@@ -1,0 +1,109 @@
+.academic-fullview-container {
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #222;
+}
+
+.afv-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.afv-controls .afv-btn {
+  padding: 6px 10px;
+  background: #ffeb66; /* brighter yellow */
+  color: #222;
+  border: 1px solid #e6c86a;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08); /* button shadow */
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.afv-controls .afv-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.10);
+}
+
+.afv-controls .afv-btn.secondary {
+  background: #e9ecef; /* ash */
+  color: #333;
+  border: 1px solid #d0d4d7;
+}
+
+.afv-week-range {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.afv-table-wrapper {
+  overflow-x: auto;
+}
+
+.afv-table {
+  border-collapse: collapse;
+  min-width: 900px;
+  width: 100%;
+}
+
+.afv-table th,
+.afv-table td {
+  border: 1px solid #e6e6e6;
+  padding: 8px;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.afv-table th {
+  background: #fafafa;
+  text-align: left;
+}
+
+.afv-time-col {
+  background: #f5f5f5; /* ash column */
+  width: 90px;
+  font-size: 12px;
+  text-align: center;
+  color: #444;
+}
+
+.afv-event-cell {
+  min-width: 160px;
+  padding: 8px;
+  color: #1b1b1b;
+  border-left: 4px solid rgba(0,0,0,0.06);
+  box-shadow: inset 0 -6px 18px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.06);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.afv-event-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 -6px 22px rgba(0,0,0,0.05), 0 10px 28px rgba(0,0,0,0.09);
+}
+
+/* palette for "random" look — applied by row (gives variety across time slots) */
+.afv-table tbody tr:nth-child(6n+1) td.afv-event-cell { background: #fff7c2; } /* pale yellow */
+.afv-table tbody tr:nth-child(6n+2) td.afv-event-cell { background: #fff8db; } /* softer */
+.afv-table tbody tr:nth-child(6n+3) td.afv-event-cell { background: #fff6a8; }
+.afv-table tbody tr:nth-child(6n+4) td.afv-event-cell { background: #fff9c7; }
+.afv-table tbody tr:nth-child(6n+5) td.afv-event-cell { background: #fff4b0; }
+.afv-table tbody tr:nth-child(6n+6) td.afv-event-cell { background: #fffad1; }
+
+/* slight ash tint for empty cells to match palette */
+.afv-empty-cell {
+  background: linear-gradient(90deg, #fbfbfb, #f5f5f5);
+  height: 28px;
+}
+
+/* small screens: make table easier to read */
+@media (max-width: 720px) {
+  .afv-table th,
+  .afv-table td {
+    padding: 6px;
+    font-size: 12px;
+  }
+  .afv-controls { gap: 6px; }
+  .afv-controls .afv-btn { padding: 5px 8px; font-size: 12px; }
+}

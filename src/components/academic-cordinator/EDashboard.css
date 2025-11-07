@@ -1,0 +1,43 @@
+.edashboard-wrap {
+  max-width: 900px;
+  margin: 24px auto;
+  padding: 18px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.edash-title {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  color: #222;
+}
+
+.edash-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.edash-btn {
+  padding: 12px 18px;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background .12s, transform .06s;
+}
+
+.edash-btn:hover { background: #eee; transform: translateY(-1px); }
+
+.edash-btn.primary {
+  background: #2b7cff;
+  color: #fff;
+  border-color: #2b7cff;
+}
+
+@media (max-width: 540px) {
+  .edash-buttons { flex-direction: column; }
+  .edash-btn { width: 100%; text-align: center; }
+}

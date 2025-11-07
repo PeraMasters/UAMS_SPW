@@ -1,28 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabaseClient';
 import './LectureTimeTable.css';
 
-// Function to generate a random light color
+// Helper: random light color for cards
 function getRandomLightColor() {
   const hue = Math.floor(Math.random() * 360);
   return `hsl(${hue}, 80%, 90%)`;
 }
 
-// Helper to format time as HH:MM (hide seconds)
+// Helper: format time "HH:MM:SS" or "HH:MM" -> "HH:MM"
 function formatTime(timeStr) {
   if (!timeStr) return '';
-  return timeStr.slice(0, 5);
+  return String(timeStr).slice(0, 5);
 }
 
-function TimetableDisplay() {
+export default function TimetableDisplay() {
   const navigate = useNavigate();
 
   const [faculties, setFaculties] = useState([]);
   const [degrees, setDegrees] = useState([]);
   const [courses, setCourses] = useState([]);
-  const [locations, setLocations] = useState([]);
   const [timetables, setTimetables] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [filters, setFilters] = useState({
     faculty: '',
     degree: '',
@@ -32,152 +33,165 @@ function TimetableDisplay() {
     date: '',
   });
 
-  useEffect(() => {
-    fetchFilters();
-    // eslint-disable-next-line
+  // Fetch faculty, degree, course, and location filters (wrapped in useCallback)
+  const fetchFilters = useCallback(async () => {
+    try {
+      console.log('fetchFilters: starting');
+      const [
+        { data: facultyData, error: fErr },
+        { data: degreeData, error: dErr },
+        { data: courseData, error: cErr },
+      ] = await Promise.all([
+        supabase.from('faculty').select('facultyid, fname'),
+        supabase.from('degree').select('degreeid, dname, facultyid'),
+        supabase.from('course').select('cid, cname, year, semester, degreeid'),
+      ]);
+
+      if (fErr || dErr || cErr) {
+        console.error('fetchFilters errors', { fErr, dErr, cErr });
+        setError('Failed to load lookup data. See console.');
+      } else {
+        setError('');
+      }
+
+      setFaculties(facultyData || []);
+      setDegrees(degreeData || []);
+      setCourses(courseData || []);
+      console.log('fetchFilters: done', {
+        faculties: (facultyData || []).length,
+        degrees: (degreeData || []).length,
+        courses: (courseData || []).length,
+      });
+    } catch (err) {
+      console.error('fetchFilters exception', err);
+      setError('Unexpected error loading lookup data. See console.');
+    }
   }, []);
 
+  // Fetch timetable from the DB view 'timetable_grid' (wrapped in useCallback)
+  const fetchTimetables = useCallback(async () => {
+    setLoading(true);
+    try {
+      console.log('fetchTimetables (view): starting, filters=', filters);
+      let query = supabase
+        .from('timetable_grid')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('starttime', { ascending: true });
+
+      if (filters.faculty) query = query.eq('facultyid', filters.faculty);
+      if (filters.degree) query = query.eq('degreeid', filters.degree);
+      if (filters.cname) query = query.eq('cname', filters.cname);
+      if (filters.year) query = query.eq('year', filters.year);
+      if (filters.semester) query = query.eq('semester', filters.semester);
+      if (filters.date) query = query.eq('date', filters.date);
+
+      const { data: rows, error } = await query;
+      console.log('fetchTimetables (view) response', { error, count: (rows || []).length });
+      if (error) {
+        console.error('timetable_grid fetch error:', error);
+        setError('Failed to load timetable. See console.');
+        setTimetables([]);
+        return;
+      }
+
+      const mapped = (rows || []).map(r => ({
+        classtimetableid: r.classtimetableid,
+        date: r.date,
+        starttime: r.starttime,
+        endtime: r.endtime,
+        vid: r.vid,
+        venue: r.location || r.venue || '',
+        cid: r.cid || '',
+        cname: r.cname || '',
+        year: r.year || '',
+        semester: r.semester || '',
+        degreeid: r.degreeid || '',
+        dname: r.dname || '',
+        facultyid: r.facultyid || '',
+        fname: r.fname || '',
+        lid: r.lid || '',
+        lecturer: [r.lecturer_fname, r.lecturer_lname].filter(Boolean).join(' '),
+      }));
+
+      setError('');
+      setTimetables(mapped);
+      console.log('fetchTimetables (view): set timetables count=', mapped.length);
+    } catch (err) {
+      console.error('fetchTimetables (view) exception:', err);
+      setError('Unexpected error fetching timetable. See console.');
+      setTimetables([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
   useEffect(() => {
-    if (courses.length && degrees.length && faculties.length && locations.length) {
-      fetchTimetables();
-    }
-    // eslint-disable-next-line
-  }, [filters, courses, degrees, faculties, locations]);
+    fetchFilters();
+  }, [fetchFilters]);
 
-  // Fetch faculty, degree, course, and location filters
-  const fetchFilters = async () => {
-    const { data: facultyData } = await supabase.from('faculty').select('facultyid, fname');
-    const { data: degreeData } = await supabase.from('degree').select('degreeid, dname, facultyid');
-    const { data: courseData } = await supabase.from('course').select('cid, cname, year, semester, degreeid');
-    const { data: locationData } = await supabase.from('location').select('vid, venue');
-    setFaculties(facultyData || []);
-    setDegrees(degreeData || []);
-    setCourses(courseData || []);
-    setLocations(locationData || []);
-  };
+  useEffect(() => {
+    // fetch timetables after filter lookups change or filters change
+    fetchTimetables();
+  }, [fetchTimetables]);
 
-  // Fetch timetable with filters (no SQL view, join client-side)
-  const fetchTimetables = async () => {
-    const { data: timetableData } = await supabase.from('classtimetable').select('*');
-    const { data: lecturerData } = await supabase.from('lecturer').select('lid, f_name, l_name');
-
-    const merged = timetableData.map((t) => {
-      const course = courses.find(c => c.cid === t.cid) || {};
-      const degree = degrees.find(d => d.degreeid === course.degreeid) || {};
-      const faculty = faculties.find(f => f.facultyid === degree.facultyid) || {};
-      const lecturer = lecturerData.find(l => l.lid === t.lid) || {};
-      const location = locations.find(loc => loc.vid === t.vid) || {};
-      return {
-        ...t,
-        facultyid: faculty.facultyid || '',
-        fname: faculty.fname || '',
-        degreeid: degree.degreeid || '',
-        dname: degree.dname || '',
-        cname: course.cname || '',
-        year: course.year || '',
-        semester: course.semester || '',
-        lecturer: lecturer.f_name && lecturer.l_name ? `${lecturer.f_name} ${lecturer.l_name}` : '',
-        venue: location.venue || '',
-      };
-    });
-
-    // Apply filters using IDs (convert all to string for comparison)
-    const filtered = merged.filter((t) => {
-      return (
-        (!filters.faculty || String(t.facultyid) === String(filters.faculty)) &&
-        (!filters.degree || String(t.degreeid) === String(filters.degree)) &&
-        (!filters.cname || t.cname === filters.cname) &&
-        (!filters.year || String(t.year) === String(filters.year)) &&
-        (!filters.semester || String(t.semester) === String(filters.semester)) &&
-        (!filters.date || t.date === filters.date)
-      );
-    });
-
-    setTimetables(filtered);
-  };
-
-  // Handle filter changes and reset dependent filters
   const handleChange = (e) => {
-    if (e.target.name === 'faculty') {
-      setFilters({
-        ...filters,
-        faculty: e.target.value,
-        degree: '',
-        cname: '',
-        year: '',
-        semester: '',
-      });
-    } else if (e.target.name === 'degree') {
-      setFilters({
-        ...filters,
-        degree: e.target.value,
-        cname: '',
-        year: '',
-        semester: '',
-      });
-    } else if (e.target.name === 'cname') {
-      setFilters({
-        ...filters,
-        cname: e.target.value,
-        year: '',
-        semester: '',
-      });
-    } else {
-      setFilters({ ...filters, [e.target.name]: e.target.value });
-    }
+    const { name, value } = e.target;
+    setFilters(prev => {
+      if (name === 'faculty') {
+        return { ...prev, faculty: value, degree: '', cname: '', year: '', semester: '' };
+      }
+      if (name === 'degree') {
+        return { ...prev, degree: value, cname: '', year: '', semester: '' };
+      }
+      if (name === 'cname') {
+        return { ...prev, cname: value, year: '', semester: '' };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
-  // Filter degrees based on selected faculty
   const filteredDegrees = filters.faculty
     ? degrees.filter(d => String(d.facultyid) === String(filters.faculty))
     : degrees;
 
-  // Filter courses based on selected degree, faculty, year, and semester
   const filteredCourses = courses.filter((c) => {
-    // Degree filter
     if (filters.degree && String(c.degreeid) !== String(filters.degree)) return false;
-    // Faculty filter (if no degree selected)
     if (!filters.degree && filters.faculty) {
-      const degree = degrees.find(d => d.degreeid === c.degreeid);
+      const degree = degrees.find(d => String(d.degreeid) === String(c.degreeid));
       if (!degree || String(degree.facultyid) !== String(filters.faculty)) return false;
     }
-    // Year filter
     if (filters.year && String(c.year) !== String(filters.year)) return false;
-    // Semester filter
     if (filters.semester && String(c.semester) !== String(filters.semester)) return false;
     return true;
   });
 
-  // Filter years and semesters based on filteredCourses
-  const filteredYears = [...new Set(filteredCourses.map(c => c.year))];
-  const filteredSemesters = [...new Set(filteredCourses.map(c => c.semester))];
+  const filteredYears = [...new Set(filteredCourses.map(c => c.year))].filter(Boolean);
+  const filteredSemesters = [...new Set(filteredCourses.map(c => c.semester))].filter(Boolean);
 
-  // Group by date
   const grouped = timetables.reduce((acc, t) => {
-    acc[t.date] = acc[t.date] || [];
-    acc[t.date].push(t);
+    (acc[t.date] = acc[t.date] || []).push(t);
     return acc;
   }, {});
 
-  // Get today's date in YYYY-MM-DD format
+  // default display: today and future. If user chooses a date, show only that date.
   const today = new Date().toISOString().slice(0, 10);
-
-  // Determine which dates to display
   let displayDates = Object.keys(grouped);
   if (filters.date) {
-    // If a date filter is set, show only that date (if exists)
     displayDates = displayDates.filter(date => date === filters.date);
   } else {
-    // Otherwise, show dates from today onward
-    displayDates = displayDates.filter(date => new Date(date) >= new Date(today));
+    displayDates = displayDates.filter(date => date >= today);
   }
   displayDates.sort();
 
+  // current time for marking past time slots (HH:MM)
+  const nowTime = new Date();
+  const nowHHMM = `${String(nowTime.getHours()).padStart(2, '0')}:${String(nowTime.getMinutes()).padStart(2, '0')}`;
+
   return (
     <div className="timetable-container">
-      {/* Ribbon header */}
       <div className="timetable-header-bg-only">UAMS - TIME TABLE DASHBOARD</div>
-      {/* Filters */}
+
       <div className="timetable-filters">
         <select name="faculty" onChange={handleChange} value={filters.faculty}>
           <option value="">All Faculties</option>
@@ -196,7 +210,7 @@ function TimetableDisplay() {
         <select name="cname" onChange={handleChange} value={filters.cname}>
           <option value="">All Subjects</option>
           {filteredCourses.map((c) => (
-            <option key={c.cname} value={c.cname}>{c.cname}</option>
+            <option key={c.cid} value={c.cname}>{c.cname}</option>
           ))}
         </select>
 
@@ -216,47 +230,62 @@ function TimetableDisplay() {
 
         <input type="date" name="date" onChange={handleChange} value={filters.date} />
 
-        <button onClick={() => navigate('/academic-coordinator-dashboard')}>
+        <button type="button" onClick={() => navigate('/academic-coordinator-dashboard')}>
           Academic Coordinator Dashboard
         </button>
 
-        <button onClick={() => navigate('/view-my-own-timetable')}>
+        <button type="button" onClick={() => navigate('/view-my-own-timetable')}>
           View My Own Time Table
+        </button>
+
+        <button type="button" onClick={() => navigate('/academic-full-view')}>
+          Full view
         </button>
       </div>
 
-      {/* Display Timetables Grouped by Date */}
-      {displayDates.length === 0 ? (
-        <p>No timetables found.</p>
-      ) : (
-        displayDates.map((date) => (
+      {loading && <p>Loading timetables...</p>}
+      {!loading && displayDates.length === 0 && <p>No timetables found.</p>}
+      {error && <p className="error-message">{error}</p>}
+
+      {!loading && displayDates.length > 0 && displayDates.map((date) => {
+        // is this date earlier than today?
+        const dateIsPast = date < today;
+        return (
           <div key={date} className="timetable-date">
             <h3>{date}</h3>
             <div className="timetable-blocks">
-              {grouped[date].map((t) => (
-                <div
-                  className="timetable-block"
-                  key={t.classtimetableid}
-                  style={{ background: getRandomLightColor() }}
-                >
-                  <div><strong>Faculty -</strong> {t.fname}</div>
-                  <div><strong>Degree -</strong> {t.dname}</div>
-                  <div><strong>Subject -  </strong> {t.cname}</div>
-                  <div><strong>Year -</strong> {t.year}</div>
-                  <div><strong>Semester -</strong> {t.semester}</div>
-                  <div>
-                    <strong>Time -</strong> {formatTime(t.starttime)} - {formatTime(t.endtime)}
+              {grouped[date].map((t) => {
+                const end = (t.endtime || '00:00').slice(0,5);
+                // for today's slots, consider slot past when endtime <= now
+                const isPastSlot = dateIsPast || (date === today && end <= nowHHMM);
+                return (
+                  <div
+                    className="timetable-block"
+                    key={t.classtimetableid || `${t.cid}-${t.date}-${t.starttime}`}
+                    style={{
+                      background: getRandomLightColor(),
+                      opacity: isPastSlot ? 0.5 : 1,
+                      pointerEvents: isPastSlot ? 'none' : 'auto'
+                    }}
+                    data-past={isPastSlot}
+                  >
+                    <div><strong>Faculty -</strong> {t.fname}</div>
+                    <div><strong>Degree -</strong> {t.dname}</div>
+                    <div><strong>Subject -</strong> {t.cname}</div>
+                    <div><strong>Year -</strong> {t.year}</div>
+                    <div><strong>Semester -</strong> {t.semester}</div>
+                    <div>
+                      <strong>Time -</strong> {formatTime(t.starttime)} - {formatTime(t.endtime)}
+                    </div>
+                    <div><strong>Lecturer -</strong> {t.lecturer}</div>
+                    <div><strong>Location -</strong> {t.venue}</div>
                   </div>
-                  <div><strong>Lecturer -</strong> {t.lecturer}</div>
-                  <div><strong>location - </strong> {t.venue}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
-        ))
-      )}
+        );
+      })}
     </div>
   );
 }
-
-export default TimetableDisplay;

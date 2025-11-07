@@ -1,0 +1,114 @@
+/* Layout */
+.confirm-wrapper {
+  max-width: 980px;
+  margin: 18px auto;
+  padding: 12px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Title */
+.page-title {
+  margin: 0 0 12px 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+/* Messages */
+.message {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.message.success { background: #e6f6ea; color: #1b6b2f; }
+.message.error   { background: #fdecea; color: #8b1e1e; }
+
+/* Summary row */
+.summary {
+  margin-bottom: 12px;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* Table */
+.students-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.students-table th,
+.students-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  font-size: 0.95rem;
+}
+.students-table thead th {
+  font-weight: 700;
+  color: #333;
+}
+.students-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+.students-table td.center {
+  text-align: center;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* Buttons */
+.btn {
+  border: none;
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-primary {
+  background: #2d8f3b;
+  color: #fff;
+}
+.btn-disabled {
+  background: #bdbdbd;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.confirm-btn {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #2b7cff;
+  background: #2b7cff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.confirm-btn.confirmed {
+  background: #28a745;
+  border-color: #28a745;
+}
+.confirm-btn[disabled] { opacity: 0.7; cursor: default; }
+
+.confirm-error {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #ffe6e6;
+  color: #a33;
+  border: 1px solid #f2b8b8;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .students-table th, .students-table td { padding: 6px; font-size: 0.9rem; }
+  .page-title { font-size: 1.1rem; }
+}

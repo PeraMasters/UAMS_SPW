@@ -70,11 +70,11 @@ const AcademicCordinatorDashboard = () => {
           </div>
           <div className="nav-section">
             <div className="nav-row">
-              <button className="nav-btn">Attendance</button>
+              <button className="nav-btn"onClick={() => navigate('/academic-confirm-attendance')}>Attendance</button>
               <button className="nav-btn" onClick={() => navigate('/lecture-time-table')}>Time Table</button>
             </div>
             <div className="nav-row">
-              <button className="nav-btn">Exam</button>
+              <button className="nav-btn" onClick={() => navigate('/e-dashboard')}>Exam</button>
               <button className="nav-btn" onClick={() => navigate('/student-details')}>Student Details</button>
             </div>
           </div>

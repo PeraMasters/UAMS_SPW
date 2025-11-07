@@ -13,17 +13,22 @@ import StudentDashboard from "./components/student/StudentDashboard";
 import PaymentDetails from "./components/student/PaymentDetails";
 import "./components/Dashboard.css";
 import StudentDetails from "./components/academic-cordinator/StudentDetails";
-import LectureTimeTable from './components/academic-cordinator/LectureTimeTable'
+import TimetableDisplay from './components/academic-cordinator/LectureTimeTable';
 import ViewMyownTimetable from './components/academic-cordinator/ViewMyownTimetable';
+import EDashboard from "./components/academic-cordinator/EDashboard";
+import ExamAttendenceView from "./components/academic-cordinator/examattendenceview";
 
-
+import AcademicConfirmAttendence from './components/academic-cordinator/AcademicConfirmAttendence';
+import LectureAttendanceConfirm from './components/academic-cordinator/LectureAttendanceConfirm';
+import ConfirmAttendence from "./components/academic-cordinator/confirmattendence";
+import AcademicFullView from './components/academic-cordinator/AcademicFullView';
 
 // Protected Route Component
-const ProtectedRoute = ({ children }) => {
+function ProtectedRoute({ children }) {
   // In a real app, you would check if the user is authenticated
   // For now, we'll just render the children
   return children;
-};
+}
 
 function App() {
   return (
@@ -120,7 +125,7 @@ function App() {
           element={<StudentDetails />} />
      
         <Route path="/lecture-time-table"
-          element={<LectureTimeTable />} />
+          element={<TimetableDisplay />} />
         
 
         
@@ -128,9 +133,19 @@ function App() {
         <Route path="/view-my-own-timetable" element={<ViewMyownTimetable />} />
     
         
+        <Route path="/academic-confirm-attendance" element={<AcademicConfirmAttendence />} />
+        <Route path="/lecture-attendance-confirm/:lectureId" element={<LectureAttendanceConfirm />} />
+        <Route path="/examattendenceview" element={<ExamAttendenceView />} />
+        <Route path="/confirmattendence" element={<ConfirmAttendence />} />
+        
+        <Route path="/e-dashboard" element={<EDashboard />} />
+        <Route path="/exam-attendence" element={<ExamAttendenceView />} />
+        <Route path="/exam-attendence/download" element={<div style={{padding:20}}>Download page (implement)</div>} />
+        <Route path="/exam-attendence/upload" element={<div style={{padding:20}}>Upload page (implement)</div>} />
+        <Route path="/exam-attendence/confirm" element={<div style={{padding:20}}>Confirm page (implement)</div>} />
+          <Route path="/academic-full-view" element={<AcademicFullView />} />
         {/* Fallback route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} /></Routes>
 
       
     </Router>

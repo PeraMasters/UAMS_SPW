@@ -116,7 +116,6 @@
 }
 
 .timetable-header-bg-only {
-
   background: linear-gradient( #ebba19);
   color: #fff;
   font-size: 1.5rem;
@@ -126,7 +125,7 @@
   margin: 0 0 30px 0;
   letter-spacing: 2px;
   box-shadow: 0 2px 8px rgba(44,62,80,0.10);
-
+}
 
 /* lecture - my own time table */
 .cc-lecturer-name {
@@ -137,17 +136,7 @@
   text-transform: uppercase;
 }
 
-/* .timetable-header-row {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-bottom: 5px;
-} */
 
-/* .timetable-header-actions {
-  display: flex;
-  gap: 10px;
-} */
 .timetable-header-actions {
   display: flex;
   gap: 10px;
@@ -171,5 +160,30 @@
   color: #fff;
 }
 
+/* Button styles for LectureTimeTable actions (use class .lt-btn on the buttons) */
+.lt-btn {
+  padding: 8px 12px;
+  background: #ffeb66; /* match brighter yellow */
+  color: #111;
+  border: 1px solid #e6c86a;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.10);
+  transition: transform .08s ease, box-shadow .08s ease;
 }
+.lt-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(0,0,0,0.14);
+}
+
+/* a small "ash" alternate for secondary actions */
+.lt-btn.secondary {
+  background: #e9ecef;
+  color: #222;
+  border: 1px solid #d0d4d7;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+}
+
+/* make sure table controls align */
+.lt-controls { display:flex; gap:10px; align-items:center; }
 
