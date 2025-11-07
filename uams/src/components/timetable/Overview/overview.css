@@ -1,0 +1,285 @@
+/* ---------- Cards / Shell ---------- */
+.filters-card, .calendar-card {
+  background: #ffffff;
+  border: 1px solid #ececf5;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+  margin-bottom: 16px;
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.calendar-head .title {
+  font-weight: 700;
+  color: #1f2544;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ---------- Filter Row ---------- */
+.filters-grid{
+  display:grid;
+  grid-template-columns:
+    minmax(220px,1fr)          /* Faculty */
+    minmax(220px,1fr)          /* Department */
+    minmax(260px,1.3fr)        /* Course */
+    minmax(200px,1fr)          /* View Filter */
+    110px;                     /* View button  */
+  column-gap:32px;
+  row-gap:16px;
+  align-items:end;
+  box-sizing:border-box;
+}
+.filters-grid > div { min-width: 180px; }
+.filters-grid label { display:block; font-size:12px; color:#475467; margin:4px 0; }
+
+.filters-grid select,
+.filters-grid input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+.filters-grid select:focus,
+.filters-grid input:focus {
+  border-color: #c7bfff;
+  box-shadow: 0 0 0 3px rgba(107, 92, 255, 0.15);
+}
+
+.filter-actions{ align-self:end; justify-self:end; margin-left:0; }
+/* Ensure the button fits its grid track (no overlap) */
+.filter-actions .primary{ box-sizing:border-box; }
+.filter-actions .primary {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:60%; height:42px; border-radius:10px;
+  border:1px solid #413939; background: #413939; color:#fff; font-weight:600;
+  transition: all .15s ease; cursor:pointer;
+}
+.w-full{ margin-left: 50px; gap:25px;}
+.filter-actions .primary:hover { background:#1E293B; border-color:#1E293B; transform:translateY(-1px); }
+.filter-actions .primary:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+
+@media (max-width: 1440px){
+  .filters-grid{
+    grid-template-columns:
+      minmax(220px,1fr)
+      minmax(220px,1fr)
+      minmax(260px,1.3fr)
+      minmax(200px,1fr)
+      110px;
+  }
+  .filter-actions{ grid-column:auto; justify-self:end; margin-left:0; }
+}
+@media (max-width: 860px){
+  .filters-grid{ grid-template-columns: 1fr; }
+}
+
+/* ---------- View toggle (below filters) ---------- */
+.view-toggle {
+  display:flex; gap:8px; margin-bottom:12px; align-items:center; justify-content:flex-start;
+}
+.view-toggle button {
+  padding: 6px 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .12s ease;
+}
+.view-toggle button:hover { border-color: #c9cbe7; }
+.view-toggle button.active {
+  background: #fae0a1;
+  border-color: #f3d171;
+  color: #000000;
+  box-shadow: 0 1px 0 rgba(107,92,255,0.3) inset;
+}
+
+/* ---------- Calendar (Month) ---------- */
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+.month-cell {
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+  min-height: 120px;
+  background: #fafbff;
+  padding: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.month-cell .day {
+  font-size: 12px;
+  color: #667085;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.add-slot {
+  border: 1px dashed #c7c9d9;
+  background: #fcfcff;
+  border-radius: 10px;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  margin-top: 8px;
+  font-size: 12px;
+  transition: background .12s ease, transform .08s ease;
+}
+.add-slot:hover { background: #f5f4ff; transform: translateY(-1px); }
+.event-chip {
+  background: #eef2ff;
+  border: 1px solid #d9ddff;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.event-chip.exam { background:#ffeef0; border-color:#ffd6db; }
+
+/* ---------- Calendar (Weekly grid with hours & Mon–Sun) ---------- */
+.week-shell {
+  display: grid;
+  grid-template-columns: 120px repeat(7, 1fr);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  overflow: hidden;
+}
+.week-head {
+  display: contents;
+}
+.week-head div {
+  padding: 10px;
+  font-weight: 700;
+  color: #1f2544;
+  background: #fafbff;
+  border-bottom: 1px solid #ececf5;
+}
+.time-col {
+  padding: 10px;
+  color: #667085;
+  font-weight: 600;
+  background: #fafbff;
+  border-right: 1px solid #ececf5;
+}
+.week-body {
+  display: contents;
+}
+.slot-time {
+  padding: 8px 10px;
+  border-right: 1px solid #f0f1f7;
+  border-bottom: 1px solid #f0f1f7;
+  color: #98a2b3;
+  font-size: 12px;
+  background: #fff;
+}
+.slot-cell {
+  padding: 6px;
+  border-right: 1px solid #f0f1f7;
+  border-bottom: 1px solid #f0f1f7;
+  background: #fff;
+  min-height: 58px;
+  position: relative;
+}
+.slot-plus {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 1px dashed #c8cbe4;
+  border-radius: 10px;
+  background: #fcfcff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.slot-plus:hover { background: #f5f4ff; }
+.slot-chip {
+  margin-top: 6px;
+  background: #eef2ff;
+  border: 1px solid #d9ddff;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.slot-chip.exam { background:#ffeef0; border-color:#ffd6db; }
+
+/* ---------- Helpers ---------- */
+.grid { display:grid; }
+.w-full { width:100%; }
+/* --- Weekly grid: single container (no display: contents) --- */
+.week-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(7, 1fr); /* time col + 7 days */
+  width: 100%;
+  border: 1px solid #ececf5;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* header row */
+.week-grid .hdr {
+  background: #fafbff;
+  border-bottom: 1px solid #ececf5;
+  padding: 10px;
+  font-weight: 700;
+  color: #1f2544;
+}
+
+/* time column cells */
+.week-grid .time {
+  padding: 10px;
+  color: #667085;
+  font-weight: 600;
+  background: #fafbff;
+  border-right: 1px solid #ececf5;
+  border-bottom: 1px solid #f0f1f7;
+}
+
+/* day cells */
+.week-grid .cell {
+  padding: 6px;
+  background: #fff;
+  border-right: 1px solid #f0f1f7;
+  border-bottom: 1px solid #f0f1f7;
+  min-height: 58px;
+}
+
+/* plus button in each slot */
+.week-grid .plus {
+  width: 70%;
+  margin: 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 1px dashed #c8cbe4;
+  border-radius: 10px;
+  background: #fcfcff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.week-grid .plus:hover { background: #f5f4ff; }
+
+/* event pill */
+.week-grid .pill {
+  margin-top: 6px;
+  background: #eef2ff;
+  border: 1px solid #d9ddff;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.week-grid .pill.exam { background:#ffeef0; border-color:#ffd6db; }
