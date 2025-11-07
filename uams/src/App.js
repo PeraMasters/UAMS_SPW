@@ -17,11 +17,12 @@ import StudentInquiriesManagement from "./components/student-control/StudentInqu
 import PaymentDetails from "./components/student/PaymentDetails";
 
 import "./components/Dashboard.css";
+
 import ExamResult from "./components/exam/ExamResult";
 import ExamTimetable from "./components/exam/ExamTimetable";
 import ExamAdmission  from "./components/exam/ExamAdmission";
 import AddStudentIntoExam from "./components/exam/Exam";
-import ExamAttendance from "./components/exam/ExamAttendance";
+//import ExamAttendance from "./components/exam/ExamAttendance";
 
 const ProtectedRoute = ({ children }) => {
   return children;
@@ -75,14 +76,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/exam-attendance"
-          element={
-            <ProtectedRoute>
-              <ExamAttendance />
-            </ProtectedRoute>
-          }
-        />
 
         <Route
           path="/academic-cordinator-dashboard"
@@ -100,15 +93,6 @@ function App() {
             </ProtectedRoute>
           }
         /> 
-        <Route
-          path="/student-dashboard"
-          element={
-            <ProtectedRoute>
-              <StudentDashboard />
-            </ProtectedRoute>
-          }
-        />
-
         <Route
           path="/student-control-dashboard"
           element={
