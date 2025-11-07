@@ -1,85 +1,65 @@
-import React, { useState } from "react";
-import LectureForm from "./LectureForm";
-import ExamForm from "./ExamForm";
-import OthersTab from "./OtherTab";
+import React, { useMemo, useState } from "react";
+import "./timetable.css";
 
-import CalendarView from "./CalendarView"; // ✅ use your actual file
-import "./TimetableDashboard.css";
+import HeaderBar from "./Shared/HeaderBar";
+import SideNav from "./Shared/SideNav";
 
-function TimetableDashboard() {
-  const [activeTab, setActiveTab] = useState("lecture");
-  const [isButtonHovered, setIsButtonHovered] = useState(false);
+import OverviewPage from "./Overview/OverviewPage";
+import ExamManagement from "./Exams/ExamManagement";
+import RoomManagement from "./Rooms/RoomManagement";
+import Reportdashboard from "./Reports/Reportdashboard";
 
-  // Calendar refresh trigger
-  const [refresh, setRefresh] = useState(false);
-  const bumpRefresh = () => setRefresh((r) => !r);
+export default function TimetableDashboard() {
+  // tabs: overview | exams | rooms | reports
+  const [tab, setTab] = useState("overview");
 
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = "/";
-  };
+  const title = useMemo(() => "Timetable Management", []);
+  const subtitle = useMemo(
+    () => "Manage lectures, exams, rooms and analytics",
+    []
+  );
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "lecture":
-        return <LectureForm onDataAdded={bumpRefresh} />;
-      case "exam":
-        return <ExamForm onDataAdded={bumpRefresh} />;
-      case "others":
-        return <OthersTab />;
-      default:
-        return null;
-    }
-  };
+  // Right-side header action:
+  // - overview: "+ Schedule Event"
+  // - exams:    no button (removed as requested)
+  // - rooms:    "+ Add Room"
+  const actionSlot =
+    tab === "overview" ? (
+      <button
+        className="tt-btn tt-btn-primary"
+        onClick={() => document.dispatchEvent(new Event("openScheduleEvent"))}
+      >
+        + Schedule Event
+      </button>
+    ) : tab === "rooms" ? (
+      <button
+        className="tt-btn tt-btn-primary"
+        onClick={() => document.dispatchEvent(new Event("tt.openAddRoomModal"))}
+      >
+        + Add Room
+      </button>
+    ) : null; // exams/reports: no action
 
   return (
-    <div className="dashboard-container">
-      {/* NAVBAR */}
-      <div className="navbar">
-        <h1 className="navbar-title">UAMS</h1>
-        <button
-          className={`navbar-button ${isButtonHovered ? "hovered" : ""}`}
-          onMouseEnter={() => setIsButtonHovered(true)}
-          onMouseLeave={() => setIsButtonHovered(false)}
-          onClick={handleLogout}
-        >
-          <span className="button-text">Sign Out</span>
-        </button>
+    <div className="tt-root">
+      <HeaderBar title={title} subtitle={subtitle} actionSlot={actionSlot} />
+
+      <div className="tt-layout">
+        {/* Left sidebar controls tab switching */}
+        <aside className="tt-sidenav">
+          <SideNav activeKey={tab} onChange={setTab} />
+        </aside>
+
+        {/* Main content (no top tabs) */}
+        <main className="tt-main">
+          <div className="tt-page">
+            {tab === "overview" && <OverviewPage />}
+            {tab === "exams" && <ExamManagement />}
+            {tab === "rooms" && <RoomManagement />}
+            {tab === "reports" && <Reportdashboard />}
+          </div>
+        </main>
       </div>
-
-      {/* TABS */}
-      <div className="tab-container">
-        <div
-          className={`tab-button ${activeTab === "lecture" ? "active-tab" : ""}`}
-          onClick={() => setActiveTab("lecture")}
-        >
-          Lecture Timetable
-        </div>
-        <div
-          className={`tab-button ${activeTab === "exam" ? "active-tab" : ""}`}
-          onClick={() => setActiveTab("exam")}
-        >
-          Exam Timetable
-        </div>
-        <div
-          className={`tab-button ${activeTab === "others" ? "active-tab" : ""}`}
-          onClick={() => setActiveTab("others")}
-        >
-          Others
-        </div>
-      </div>
-
-      {/* TAB CONTENT */}
-      <div className="tab-content">{renderTabContent()}</div>
-
-      {/* CALENDAR below forms */}
-      {(activeTab === "lecture" || activeTab === "exam") && (
-        <div className="calendar-block">
-          <CalendarView refreshKey={refresh} onChanged={bumpRefresh} />
-        </div>
-      )}
     </div>
   );
 }
-
-export default TimetableDashboard;
