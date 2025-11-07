@@ -1,0 +1,207 @@
+/* Navbar/Header */
+.student-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fcc42c;
+  padding: 8px 18px;
+  border-radius: 0 0 10px 10px;
+  min-height: 38px;
+  box-shadow: 0 2px 8px #e5e5e533;
+}
+.student-details-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.student-details-header p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #444;
+}
+.student-details-header button {
+  background: #fff;
+  color: #ffc014;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.student-details-header button:hover {
+  background: #ffe9a7;
+  color: #222;
+}
+
+/* Filter Section - Modern, rounded, silver, larger, with shadow and border */
+.student-details-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 22px 0 14px 0;
+  background: #f7f7fa;
+  padding: 22px 28px;
+  border-radius: 18px;
+  border: 1.5px solid #c0c0c0;
+  box-shadow: 0 2px 12px #b0b0b033;
+}
+
+.student-details-filters select {
+  min-width: 190px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1.5px solid #c0c0c0;
+  background: #fff;
+  font-size: 1.13rem;
+  color: #444;
+  box-shadow: 0 1px 6px #b0b0b022;
+  transition: border 0.18s, box-shadow 0.18s;
+}
+.student-details-filters select:focus {
+  border: 2px solid #ffc014;
+  outline: none;
+  box-shadow: 0 2px 10px #ffc01433;
+}
+
+/* Search Section */
+.student-details-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.student-details-search input {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #c0c0c0;
+  font-size: 1.08rem;
+  background: #fff;
+}
+.student-details-search button {
+  background: #ffc014;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 22px;
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.student-details-search button:last-child {
+  background: #e5e5e5;
+  color: #222;
+}
+.student-details-search button:hover {
+  opacity: 0.85;
+}
+
+/* Export Buttons */
+.student-details-export {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+.student-details-export button {
+  background: #72664e;
+  color: #f6f0f7;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 28px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 1px 4px #e5e5e522;
+  transition: background 0.18s, color 0.18s;
+}
+.student-details-export button:hover {
+  background: #72664e;
+  color: #fff;
+  opacity: 0.93;
+}
+
+/* Table */
+.student-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 12px;
+  margin-top: 18px;
+  box-shadow: 0 1px 6px #e5e5e522;
+  overflow: hidden;
+}
+.student-details-table th, .student-details-table td {
+  padding: 12px 10px;
+  text-align: center;
+}
+.student-details-table th {
+  background: #7e7357;
+  color: #fff;
+  font-size: 1.08rem;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e5e5;
+}
+.student-details-table tr {
+  transition: background 0.18s;
+}
+.student-details-table tbody tr:nth-child(even) {
+  background: #f8f9fa;
+}
+.student-details-table tbody tr:nth-child(odd) {
+  background: #fff;
+}
+.student-details-table tbody tr:hover {
+  background: #beb084;
+}
+.student-details-table td {
+  font-size: 1rem;
+  color: #333;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .student-details-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 6px;
+  }
+  .student-details-filters {
+    flex-direction: column;
+    gap: 15px;
+    padding: 14px 6px;
+  }
+  .student-details-filters select {
+    min-width: 100%;
+    width: 100%;
+  }
+  .student-details-search {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .student-details-export {
+    justify-content: center;
+    gap: 8px;
+  }
+}
+
+/* Status badge styles */
+.student-status {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.98rem;
+  color: #fff;
+}
+.student-status.active {
+  background: #4caf50;
+}
+.student-status.inactive {
+  background: #bda5a5;
+}

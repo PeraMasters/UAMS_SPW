@@ -1,251 +1,184 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Calendar, momentLocalizer, Views } from "react-big-calendar";
+import moment from "moment";
+import supabase from "../../lib/supabaseClient";
+import "react-big-calendar/lib/css/react-big-calendar.css";
 
-export default function NavbarWithCalendar() {
+
+const localizer = momentLocalizer(moment);
+const EXAM_COLOR = "#90CAF9";
+
+const safeToDate = (date, time) => {
+  if (!date || !time) return null;
+  const t = time.length === 5 ? `${time}:00` : time;
+  const d = new Date(`${date}T${t}`);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+export default function ExamTimetable({ refreshKey = 0 }) {
   const navigate = useNavigate();
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [view, setView] = useState(Views.WEEK);
 
-  const goToExamDashboard = () => {
-    navigate("/exam-dashboard");
-  };
+  async function fetchExams() {
+    setLoading(true);
+    try {
+      // select all columns (avoids referencing non-existent column names)
+      const res = await supabase.from("examtimetable").select("*").order("date", { ascending: true }).order("starttime", { ascending: true });
 
-  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      if (res.error) {
+        // log but do not surface DB column errors to the UI
+        console.error("examtimetable fetch error:", res.error);
+        setEvents([]);
+        return;
+      }
 
-  // Today's date
-  const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const todayDate = today.getDate();
-  const todayMonth = today.getMonth();
-  const todayYear = today.getFullYear();
+      const data = res.data || [];
+      const examEvents = data
+        .map((r) => {
+          const id = r.examtimetableid ?? r.id ?? null;
+          const start = safeToDate(r.date, r.starttime);
+          const end = safeToDate(r.date, r.endtime);
+          if (!id || !start || !end) return null;
+          const title = r.cid ? `Exam: ${r.cid}` : `Exam${r.examcategory ? ` (${r.examcategory})` : ""}`;
+          return {
+            id,
+            title,
+            start,
+            end,
+            resource: { ...r, pkName: r.examtimetableid ? "examtimetableid" : id ? "id" : undefined },
+            type: "exam",
+            table: "examtimetable",
+          };
+        })
+        .filter(Boolean);
 
-  // Get number of days in month
-  const getDaysInMonth = (month, year) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
-  // Get which day of week month starts on (0 = Sun)
-  const getStartDay = (month, year) => {
-    return new Date(year, month, 1).getDay();
-  };
-
-  // Change month
-  const changeMonth = (offset) => {
-    let newMonth = currentMonth + offset;
-    let newYear = currentYear;
-
-    if (newMonth < 0) {
-      newMonth = 11;
-      newYear -= 1;
-    } else if (newMonth > 11) {
-      newMonth = 0;
-      newYear += 1;
+      setEvents(examEvents);
+    } catch (err) {
+      console.error("fetchExams unexpected error", err);
+      setEvents([]);
+    } finally {
+      setLoading(false);
     }
-
-    setCurrentMonth(newMonth);
-    setCurrentYear(newYear);
-  };
-
-  // Click handler for date
-  const handleDateClick = (day) => {
-    alert(`You clicked on ${monthNames[currentMonth]} ${day}, ${currentYear}`);
-  };
-
-  // Month names
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
-  // Get calendar data
-  const daysInMonth = getDaysInMonth(currentMonth, currentYear);
-  const startDay = getStartDay(currentMonth, currentYear);
-
-  // Calendar grid: add empty slots for start day
-  const calendarCells = [];
-  let emptySlots = startDay === 0 ? 6 : startDay - 1; // Adjust for Monday start
-  for (let i = 0; i < emptySlots; i++) {
-    calendarCells.push(null);
   }
-  for (let d = 1; d <= daysInMonth; d++) {
-    calendarCells.push(d);
-  }
+
+  useEffect(() => {
+    fetchExams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
+  const eventPropGetter = useMemo(
+    () => (event) => ({
+      style: { backgroundColor: EXAM_COLOR, border: "none", color: "#000", opacity: 0.95 },
+    }),
+    []
+  );
+
+  // inline navbar (yellow)
+  const navbarStyle = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: 64,
+    backgroundColor: "#E6BB0C",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0 20px",
+    boxSizing: "border-box",
+    zIndex: 1000,
+    boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+  };
+  const titleStyle = { color: "#2f2f2f", fontSize: 26, fontWeight: 800 };
+  const navButtonStyle = {
+    background: "white",
+    border: "1px solid rgba(0,0,0,0.12)",
+    padding: "8px 14px",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+  };
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
-      {/* Navbar */}
-      <div
-        style={{
-          backgroundColor: "#eac728",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "12px 24px",
-        }}
-      >
-        <div style={{ fontWeight: "bold", fontSize: "20px" }}>UAMS</div>
-        <button
-          onClick={goToExamDashboard}
-          style={{
-            backgroundColor: "#fff",
-            border: "none",
-            borderRadius: "5px",
-            padding: "8px 14px",
-            fontWeight: "bold",
-            fontSize: "16px",
-            cursor: "pointer",
-            boxShadow: "0 0 4px rgba(0,0,0,0.2)",
-          }}
-        >
-          Exam Dashboard
-        </button>
+    <>
+      <div style={navbarStyle} role="navigation" aria-label="Top navigation">
+        <div style={titleStyle}>UAMS</div>
+        <div>
+          <button
+            style={navButtonStyle}
+            onClick={() => navigate("/exam-dashboard")}
+            aria-label="Go to exam dashboard"
+          >
+            Exam Dashboard
+          </button>
+        </div>
       </div>
 
-      {/* Calendar */}
-      <div
-        style={{
-          maxWidth: "900px",
-          margin: "30px auto",
-          padding: "25px",
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          backgroundColor: "#fff",
-          fontSize: "18px",
-        }}
-      >
-        {/* Header with navigation */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "15px",
-          }}
-        >
-          <button
-            onClick={() => changeMonth(-1)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "red",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
-          >
-            ◀ {monthNames[(currentMonth + 11) % 12]}
-          </button>
-          <h2 style={{ margin: 0 }}>
-            {monthNames[currentMonth]} {currentYear}
-          </h2>
-          <button
-            onClick={() => changeMonth(1)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "red",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
-          >
-            {monthNames[(currentMonth + 1) % 12]} ▶
-          </button>
+      {/* main content - ensure it sits below the fixed navbar */}
+      <div className="calendar-container" style={{ paddingTop: 90 }}>
+        <div className="calendar-header">
+          <h3>
+            Exam Timetable {loading ? "(loading...)" : ""}
+            <span style={{ marginLeft: 12, fontSize: 12, opacity: 0.8 }}>• Exam = blue</span>
+          </h3>
+          {/* error messages are intentionally not rendered to avoid exposing DB column errors */}
+          {!loading && events.length === 0 && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>No exam events found.</div>}
         </div>
 
-        {/* Days of week */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            textAlign: "center",
-            fontWeight: "bold",
-            borderBottom: "1px solid #ddd",
-            paddingBottom: "8px",
-          }}
-        >
-          {daysOfWeek.map((day) => (
-            <div key={day}>{day}</div>
-          ))}
-        </div>
+        <Calendar
+          localizer={localizer}
+          events={events}
+          startAccessor="start"
+          endAccessor="end"
+          date={currentDate}
+          onNavigate={(d) => setCurrentDate(d)}
+          view={view}
+          onView={(v) => setView(v)}
+          views={[Views.WEEK, Views.MONTH]}
+          style={{ height: 560 }}
+          eventPropGetter={eventPropGetter}
+        />
 
-        {/* Dates */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            textAlign: "center",
-            marginTop: "8px",
-            rowGap: "15px",
-          }}
-        >
-          {calendarCells.map((day, index) =>
-            day ? (
-              <div
-                key={index}
-                style={{
-                  ...dateCellStyle,
-                  backgroundColor:
-                    day === todayDate &&
-                    currentMonth === todayMonth &&
-                    currentYear === todayYear
-                      ? "darkred"
-                      : "transparent",
-                  color:
-                    day === todayDate &&
-                    currentMonth === todayMonth &&
-                    currentYear === todayYear
-                      ? "#fff"
-                      : "#000",
-                  fontWeight:
-                    day === todayDate &&
-                    currentMonth === todayMonth &&
-                    currentYear === todayYear
-                      ? "bold"
-                      : "normal",
-                  position: "relative",
-                }}
-                onClick={() => handleDateClick(day)}
-              >
-                {day}
-                {day === todayDate &&
-                  currentMonth === todayMonth &&
-                  currentYear === todayYear && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "110%",
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        fontSize: "12px",
-                        color: "darkorange",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Today
-                    </div>
-                  )}
-              </div>
-            ) : (
-              <div key={index}></div>
-            )
+        <div style={{ marginTop: 12 }}>
+          <h4 style={{ marginBottom: 8 }}>Exam list</h4>
+          {events.length === 0 ? (
+            <p style={{ margin: 0 }}>No exams to show.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>ID</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Course</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Date</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Start</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>End</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Venue</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Category</th>
+                  <th style={{ border: "1px solid #ccc", padding: 8 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((e) => (
+                  <tr key={String(e.id)}>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{e.id}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{e.resource?.cid || ""}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{moment(e.start).format("YYYY-MM-DD")}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{moment(e.start).format("HH:mm")}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{moment(e.end).format("HH:mm")}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{e.resource?.vid || ""}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{e.resource?.examcategory || ""}</td>
+                    <td style={{ border: "1px solid #ccc", padding: 8 }}>{e.resource?.Status ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
-
-// Date cell style
-const dateCellStyle = {
-  padding: "14px",
-  borderRadius: "50%",
-  cursor: "pointer",
-  fontSize: "18px",
-  transition: "background 0.2s",
-  userSelect: "none",
-};
-
-
-
-
-
-
-

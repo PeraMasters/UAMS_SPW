@@ -1,0 +1,178 @@
+/* AcademicConfirmAttendence.css */
+
+/* Container */
+.timetable-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 10px;
+  background: #f7f7fa;
+  border-radius: 18px;
+  box-shadow: 0 2px 12px #b0b0b033;
+}
+
+/* Header */
+.timetable-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.timetable-header-bg-only {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #7e7357;
+  background: #c4c0ae;
+  border-radius: 10px;
+  padding: 12px 15px;
+}
+.timetable-header-actions {
+  display: flex;
+  gap: 10px;
+}
+.timetable-header-btn {
+  background: #ffc014;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.timetable-header-btn:hover {
+  background: #e5b700;
+}
+
+/* Summary */
+.lecture-summary {
+  display: flex;
+  gap: 32px;
+  background: #fffbe6;
+  border: 1.5px solid #c0c0c0;
+  border-radius: 10px;
+  padding: 12px 22px;
+  margin: 18px 0 10px 0;
+  font-size: 1.08rem;
+  font-weight: 500;
+  color: #7e7357;
+}
+
+/* Filters */
+.timetable-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px #e5e5e522;
+}
+.timetable-filters input,
+.timetable-filters select {
+  min-width: 160px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1.5px solid #c0c0c0;
+  background: #fff;
+  font-size: 1rem;
+  transition: border 0.18s;
+}
+.timetable-filters input:focus,
+.timetable-filters select:focus {
+  border: 1.5px solid #ffc014;
+  outline: none;
+}
+.timetable-filters button {
+  background: #ffc014;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 18px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.timetable-filters button:hover {
+  background: #e5b700;
+}
+
+/* Timetable by date */
+.timetable-date {
+  margin-bottom: 24px;
+}
+.timetable-date h3 {
+  margin-bottom: 12px;
+  color: #7e7357;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Timetable blocks */
+.timetable-blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.timetable-block {
+  border: 1.5px solid #c0c0c0;
+  border-radius: 14px;
+  padding: 18px 22px;
+  min-width: 220px;
+  box-shadow: 0 2px 8px #b0b0b033;
+  font-size: 1rem;
+  color: #444;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: #fffbec; /* Default: pending */
+  transition: background 0.2s, border 0.2s;
+}
+.timetable-block.pending-block {
+  background: #ebe3ca; /* yellow/orange for pending */
+  border: 1.5px solid #c0c0c0;
+}
+.timetable-block.completed-block {
+  background: #a5e6b0; /* green for completed */
+  border: 1.5px solid #4caf50;
+}
+.cc-lecturer-name {
+  color: #72664e;
+  font-weight: 600;
+}
+
+/* Confirm Button */
+.confirm-btn {
+  background: #ffc014;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background 0.18s;
+}
+.confirm-btn.completed {
+  background: #4caf50;
+  color: #fff;
+  cursor: default;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .timetable-header-row {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .timetable-filters {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 4px;
+  }
+  .timetable-blocks {
+    flex-direction: column;
+    gap: 12px;
+  }
+}

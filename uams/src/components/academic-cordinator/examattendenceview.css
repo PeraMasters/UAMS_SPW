@@ -1,0 +1,110 @@
+/* Adjust this height to match your navigation bar height */
+:root {
+  --uams-nav-height: 64px;
+  --uams-gap: 12px;
+}
+
+/* wrapper pushes content below the global nav and constrains width */
+.exam-page-wrapper {
+  max-width: 980px;
+  margin: 18px auto;
+  padding: 12px;
+  box-sizing: border-box;
+  padding-top: calc(var(--uams-nav-height) + 12px); /* main effect: fall content after nav */
+  background: transparent;
+}
+
+/* optional table/button styles moved from inline */
+.exam-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.exam-table th,
+.exam-table td {
+  text-align: left;
+  padding: 6px;
+  border-bottom: 1px solid #ddd;
+}
+.exam-table tbody tr td {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mark-btn {
+  background: #2d8f3b;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Ensure controls don't overlap: flexible responsive layout for the filter row */
+
+:root {
+  --uams-nav-height: 64px;
+  --uams-gap: 12px;
+}
+
+/* page wrapper already exists */
+.exam-page-wrapper {
+  max-width: 980px;
+  margin: 18px auto;
+  padding: 12px;
+  box-sizing: border-box;
+  padding-top: calc(var(--uams-nav-height) + 12px);
+}
+
+/* Controls row that holds the date / cid / start / end / category / type */
+.controls {
+  display: flex;
+  gap: var(--uams-gap);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+/* Individual field: flexible but won't shrink below min width */
+.field {
+  flex: 1 1 220px; /* grow, shrink, preferred width */
+  min-width: 160px; /* prevent overlap on medium screens */
+  box-sizing: border-box;
+}
+
+/* Slightly smaller for date field */
+.field.field-date { flex: 0 0 180px; min-width: 140px; }
+
+/* Label + input/select full width */
+.field label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.field input[type="date"],
+.field select,
+.field input {
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* Buttons */
+.mark-btn {
+  background: #2d8f3b;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Responsive: on small screens stack fields vertically */
+@media (max-width: 640px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .field { flex: 1 1 auto; min-width: 0; }
+  .field.field-date { flex: 1 1 auto; }
+}
